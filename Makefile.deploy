@@ -1,0 +1,115 @@
+# Makefile.deploy — cross-compile picoclaw for Raspberry Pi and deploy via SSH
+#
+# Usage (from the repo root, via Git Bash on Windows or any POSIX shell):
+#
+#   make -f Makefile.deploy build-pi        # cross-compile for linux/arm64
+#   make -f Makefile.deploy deploy          # build + push binary + skills + config
+#   make -f Makefile.deploy logs            # tail journalctl on Pi
+#   make -f Makefile.deploy rollback        # revert to previous binary
+#
+# Prerequisites:
+#   - Go 1.25+ in PATH
+#   - SSH access to PI_HOST (key-based recommended)
+#   - rsync available (Git Bash ships it; or use WSL)
+#
+# PI_HOST must resolve — use Tailscale hostname or bare IP.
+# On Windows, run this Makefile from Git Bash (not PowerShell directly).
+#
+# Standalone PowerShell build commands (no make required):
+#   # 1. Generate the embedded workspace using the HOST arch (no GOOS/GOARCH set):
+#   Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+#   go generate ./cmd/picoclaw/internal/onboard/...
+#   # 2. Cross-compile for the Pi:
+#   $env:GOOS="linux"; $env:GOARCH="arm64"; $env:CGO_ENABLED="0"
+#   go build -tags "goolm,stdjson,no_matrix" -ldflags="-s -w" -o build/picoclaw-arm64 ./cmd/picoclaw
+
+PI_HOST  ?= picoclaw@pi-assistant
+GOARCH   ?= arm64
+GOOS     ?= linux
+BUILD_DIR = build
+
+# Build tags:
+#   no_matrix  — drops the Matrix channel (avoids libolm/CGO when building without goolm)
+#   goolm      — pure-Go OLM implementation (matches upstream Makefile default; belt-and-suspenders)
+#   stdjson    — standard library JSON codec
+BUILD_TAGS = goolm,stdjson,no_matrix
+
+LDFLAGS = -s -w
+
+ifeq ($(OS),Windows_NT)
+	POWERSHELL = powershell -NoProfile -Command
+endif
+
+.PHONY: all build-pi _prepare-workspace deploy-binary deploy-skills deploy-config deploy logs rollback
+
+all: build-pi
+
+# TODO: add picoclaw-runshell to build-pi and deploy-binary once cmd/picoclaw-runshell is implemented
+
+## _prepare-workspace: Populate the embedded workspace (go generate)
+ifeq ($(OS),Windows_NT)
+_prepare-workspace:
+	@echo "Preparing embedded workspace (go generate) ..."
+	$(POWERSHELL) "Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue; go generate ./cmd/picoclaw/internal/onboard/..."
+else
+_prepare-workspace:
+	@echo "Preparing embedded workspace (go generate) ..."
+	GOOS=$$(go env GOHOSTOS) GOARCH=$$(go env GOHOSTARCH) CGO_ENABLED=$$(go env CGO_ENABLED) go generate ./cmd/picoclaw/internal/onboard/...
+endif
+
+## build-pi: Cross-compile picoclaw for linux/arm64
+ifeq ($(OS),Windows_NT)
+build-pi: _prepare-workspace
+	@echo "Building picoclaw for $(GOOS)/$(GOARCH) ..."
+	$(POWERSHELL) "\
+		$$env:GOOS='$(GOOS)'; \
+		$$env:GOARCH='$(GOARCH)'; \
+		$$env:CGO_ENABLED='0'; \
+		New-Item -ItemType Directory -Force -Path '$(BUILD_DIR)' | Out-Null; \
+		go build -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' \
+		  -o '$(BUILD_DIR)/picoclaw-$(GOARCH)' ./cmd/picoclaw"
+	@echo "Binary: $(BUILD_DIR)/picoclaw-$(GOARCH)"
+else
+build-pi: _prepare-workspace
+	@echo "Building picoclaw for $(GOOS)/$(GOARCH) ..."
+	mkdir -p $(BUILD_DIR)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 \
+		go build \
+		-tags "$(BUILD_TAGS)" \
+		-ldflags "$(LDFLAGS)" \
+		-o $(BUILD_DIR)/picoclaw-$(GOARCH) \
+		./cmd/picoclaw
+	@echo "Binary: $(BUILD_DIR)/picoclaw-$(GOARCH)"
+endif
+
+## deploy-binary: Build then install binary on Pi via SSH/SCP
+deploy-binary: build-pi
+	ssh $(PI_HOST) 'sudo cp /usr/local/bin/picoclaw /usr/local/bin/picoclaw.prev 2>/dev/null || true'
+	scp $(BUILD_DIR)/picoclaw-$(GOARCH)           $(PI_HOST):/tmp/picoclaw.new
+	ssh $(PI_HOST) '\
+		sudo mv /tmp/picoclaw.new /usr/local/bin/picoclaw && \
+		sudo chmod +x /usr/local/bin/picoclaw && \
+		sudo systemctl restart picoclaw'
+
+## deploy-skills: Sync built-in skills to the Pi workspace
+deploy-skills:
+	rsync -av --delete workspace/skills/ $(PI_HOST):/home/picoclaw/skills/
+
+## deploy-config: Push config.yaml to the Pi and restart
+deploy-config:
+	scp deploy/config.yaml $(PI_HOST):/home/picoclaw/config.yaml
+	ssh $(PI_HOST) 'sudo systemctl restart picoclaw'
+
+## deploy: Full deploy — binary + skills + config
+deploy: deploy-binary deploy-skills deploy-config
+
+## logs: Tail picoclaw journal on the Pi
+logs:
+	ssh $(PI_HOST) 'sudo journalctl -u picoclaw -f'
+
+## rollback: Stop picoclaw, restore previous binary, restart
+rollback:
+	ssh $(PI_HOST) '\
+		sudo systemctl stop picoclaw && \
+		sudo cp /usr/local/bin/picoclaw.prev /usr/local/bin/picoclaw && \
+		sudo systemctl start picoclaw'
