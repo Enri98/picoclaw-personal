@@ -16,6 +16,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/providers/azure"
 	"github.com/sipeed/picoclaw/pkg/providers/bedrock"
 	"github.com/sipeed/picoclaw/pkg/providers/common"
+	"github.com/sipeed/picoclaw/pkg/providers/vertex"
 )
 
 // createClaudeAuthProvider creates a Claude provider using OAuth credentials from auth store.
@@ -353,6 +354,28 @@ func CreateProviderFromConfig(cfg *config.ModelConfig) (LLMProvider, string, err
 			return nil, "", err
 		}
 		return finalizeProviderFromConfig(provider, modelID, cfg)
+
+	case "vertex":
+		// Vertex AI — service-account OAuth, OpenAI-compatible endpoint.
+		// Project ID and location are read from GCP_PROJECT_ID and GCP_LOCATION
+		// env vars. Credentials come from GOOGLE_APPLICATION_CREDENTIALS or the
+		// standard Application Default Credentials chain. No api_key required.
+		var reqTimeout time.Duration
+		if cfg.RequestTimeout > 0 {
+			reqTimeout = time.Duration(cfg.RequestTimeout) * time.Second
+		}
+		vertexProvider, err := vertex.NewProvider(vertex.Config{
+			ProjectID:       "", // resolved from env GCP_PROJECT_ID
+			Location:        "", // resolved from env GCP_LOCATION
+			CredentialsPath: "", // resolved from env GOOGLE_APPLICATION_CREDENTIALS
+			Proxy:           cfg.Proxy,
+			RequestTimeout:  reqTimeout,
+			UserAgent:       userAgent,
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("creating vertex provider: %w", err)
+		}
+		return finalizeProviderFromConfig(vertexProvider, modelID, cfg)
 
 	default:
 		return nil, "", fmt.Errorf("unknown protocol %q in model %q", protocol, cfg.Model)

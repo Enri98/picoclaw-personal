@@ -103,6 +103,17 @@ func WithCustomHeaders(customHeaders map[string]string) Option {
 	}
 }
 
+// WithHTTPClient replaces the provider's default HTTP client. Use this when
+// the transport layer must handle authentication (e.g. oauth2.NewClient).
+// Passing nil is a no-op.
+func WithHTTPClient(client *http.Client) Option {
+	return func(p *Provider) {
+		if client != nil {
+			p.httpClient = client
+		}
+	}
+}
+
 func WithProviderName(providerName string) Option {
 	return func(p *Provider) {
 		p.providerName = strings.ToLower(strings.TrimSpace(providerName))
@@ -802,6 +813,12 @@ func normalizeModel(model, apiBase string) string {
 	}
 
 	if strings.Contains(strings.ToLower(apiBase), "openrouter.ai") {
+		return model
+	}
+
+	// Vertex AI OpenAI-compatible endpoint requires the full "google/model" prefix
+	// in the model field. Do not strip it.
+	if strings.Contains(strings.ToLower(apiBase), "aiplatform.googleapis.com") {
 		return model
 	}
 

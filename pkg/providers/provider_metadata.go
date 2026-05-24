@@ -561,6 +561,18 @@ var modelProviderOptionsByName = map[string]ModelProviderOption{
 		Aliases:             []string{"dashscope-us"},
 		httpAPI:             true,
 	},
+	"vertex": {
+		ID:                  "vertex",
+		DisplayName:         "Google Vertex AI",
+		IconSlug:            "googlecloud",
+		Domain:              "cloud.google.com",
+		EmptyAPIKeyAllowed:  true,
+		CreateAllowed:       true,
+		DefaultModelAllowed: true,
+		Priority:            33,
+		CommonModels:        []string{"gemini-3-flash", "gemini-3-pro", "gemini-2.5-flash", "gemini-2.5-pro"},
+		Aliases:             []string{"vertex-ai"},
+	},
 }
 
 var normalizedModelProviderAliasesByName = buildModelProviderAliasMap()
