@@ -110,6 +110,12 @@ func resolveMediaRefs(messages []providers.Message, store media.MediaStore, maxS
 					pendingToolImages = append(pendingToolImages, dataURL)
 				}
 			}
+			if m.Role == "user" && strings.HasPrefix(mime, "audio/") {
+				dataURL := encodeImageToDataURL(localPath, mime, info, maxSize)
+				if dataURL != "" {
+					resolved = append(resolved, dataURL)
+				}
+			}
 		}
 
 		msg.Media = resolved
