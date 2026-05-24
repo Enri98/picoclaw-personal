@@ -32,13 +32,11 @@ type nativeInlineData struct {
 }
 
 type nativeFuncCall struct {
-	ID   string         `json:"id,omitempty"`
 	Name string         `json:"name"`
 	Args map[string]any `json:"args,omitempty"`
 }
 
 type nativeFuncResp struct {
-	ID       string         `json:"id,omitempty"`
 	Name     string         `json:"name"`
 	Response map[string]any `json:"response"`
 }
@@ -132,7 +130,6 @@ func buildNativeRequest(
 					Role: "user",
 					Parts: []nativePart{{
 						FunctionResponse: &nativeFuncResp{
-							ID:   msg.ToolCallID,
 							Name: toolName,
 							Response: map[string]any{
 								"result": msg.Content,
@@ -179,7 +176,6 @@ func buildNativeRequest(
 				}
 				c.Parts = append(c.Parts, nativePart{
 					FunctionCall: &nativeFuncCall{
-						ID:   tc.ID,
 						Name: name,
 						Args: args,
 					},
@@ -195,7 +191,6 @@ func buildNativeRequest(
 				Role: "user",
 				Parts: []nativePart{{
 					FunctionResponse: &nativeFuncResp{
-						ID:   msg.ToolCallID,
 						Name: toolName,
 						Response: map[string]any{
 							"result": msg.Content,
@@ -311,10 +306,9 @@ func parseNativeResponse(resp *nativeResponse) *LLMResponse {
 					args = make(map[string]any)
 				}
 				argsJSON, _ := json.Marshal(args)
-				id := part.FunctionCall.ID
-				if id == "" {
-					id = fmt.Sprintf("call_%s_%d", part.FunctionCall.Name, time.Now().UnixNano())
-				}
+				// Gemini's native response carries no ID on function calls;
+				// synthesize one so downstream code that matches by ID still works.
+				id := fmt.Sprintf("call_%s_%d", part.FunctionCall.Name, time.Now().UnixNano())
 				toolCalls = append(toolCalls, ToolCall{
 					ID:        id,
 					Name:      part.FunctionCall.Name,
