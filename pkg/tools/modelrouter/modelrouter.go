@@ -101,7 +101,11 @@ func route(content string) (rule, targetModel, newContent string) {
 	}
 
 	if strings.Contains(content, voiceMarker) {
-		return "voice", modelPro, content
+		// Strip the marker so it doesn't reach the LLM. The audio bytes are
+		// carried separately on the message and are what the model should
+		// respond to; the marker is only a routing signal.
+		stripped := strings.TrimSpace(strings.ReplaceAll(content, voiceMarker, ""))
+		return "voice", modelPro, stripped
 	}
 
 	if len(content) > longMsgLen {
