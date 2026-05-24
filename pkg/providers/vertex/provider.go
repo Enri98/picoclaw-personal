@@ -3,6 +3,7 @@ package vertex
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -13,10 +14,14 @@ import (
 )
 
 type (
-	LLMResponse    = protocoltypes.LLMResponse
-	StreamChunk    = protocoltypes.StreamChunk
-	Message        = protocoltypes.Message
-	ToolDefinition = protocoltypes.ToolDefinition
+	LLMResponse            = protocoltypes.LLMResponse
+	StreamChunk            = protocoltypes.StreamChunk
+	Message                = protocoltypes.Message
+	ToolDefinition         = protocoltypes.ToolDefinition
+	ToolCall               = protocoltypes.ToolCall
+	FunctionCall           = protocoltypes.FunctionCall
+	UsageInfo              = protocoltypes.UsageInfo
+	ToolFunctionDefinition = protocoltypes.ToolFunctionDefinition
 )
 
 const (
@@ -30,18 +35,19 @@ const (
 	defaultRequestTimeout = 120 * time.Second
 )
 
-// Provider implements picoclaw's LLMProvider interface for Vertex AI using
-// the Vertex OpenAI-compatible Chat Completions endpoint. Authentication uses
-// a service-account JSON key (or Application Default Credentials) with
-// automatic token refresh via golang.org/x/oauth2/google.
+// Provider implements picoclaw's LLMProvider interface for Vertex AI.
 //
-// The endpoint URL has the form:
+// Text-only conversations are routed to the OpenAI-compatible Chat Completions
+// endpoint (delegated to openai_compat.Provider).
 //
-//	https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/endpoints/openapi
-//
-// Request/response format is OpenAI Chat Completions, delegated to openai_compat.Provider.
+// Conversations that contain audio media are routed to the native Gemini
+// generateContent endpoint, which accepts audio/ogg natively.
 type Provider struct {
-	delegate *openai_compat.Provider
+	delegate   *openai_compat.Provider
+	httpClient *http.Client
+	projectID  string
+	location   string
+	userAgent  string
 }
 
 // Config holds the parameters needed to construct a Vertex provider.
@@ -111,20 +117,29 @@ func NewProvider(cfg Config) (*Provider, error) {
 	// Construct an openai_compat.Provider with no static API key
 	// (authentication is handled by the oauth2 transport).
 	delegate := openai_compat.NewProvider(
-		"",      // no static API key — bearer token injected by transport
+		"", // no static API key — bearer token injected by transport
 		apiBase,
-		"",      // proxy is handled by httpClient.Transport
+		"", // proxy is handled by httpClient.Transport
 		openai_compat.WithHTTPClient(httpClient),
 		openai_compat.WithUserAgent(cfg.UserAgent),
 		openai_compat.WithProviderName("vertex"),
 	)
 
-	return &Provider{delegate: delegate}, nil
+	return &Provider{
+		delegate:   delegate,
+		httpClient: httpClient,
+		projectID:  projectID,
+		location:   location,
+		userAgent:  cfg.UserAgent,
+	}, nil
 }
 
-// Chat implements LLMProvider.Chat. The model name is automatically prefixed
-// with "google/" before the request is sent (e.g. "gemini-3-flash" becomes
-// "google/gemini-3-flash" on the wire).
+// Chat implements LLMProvider.Chat.
+//
+// When the conversation contains audio media the request is sent to the native
+// Gemini generateContent endpoint, which accepts audio/ogg.  Text-only
+// conversations are forwarded to the OpenAI-compatible endpoint (the model name
+// is prefixed with "google/" for that path).
 func (p *Provider) Chat(
 	ctx context.Context,
 	messages []Message,
@@ -132,10 +147,18 @@ func (p *Provider) Chat(
 	model string,
 	options map[string]any,
 ) (*LLMResponse, error) {
+	if hasAudioContent(messages) {
+		bare := stripPrefix(model)
+		req := buildNativeRequest(messages, tools, bare, options)
+		return p.callNativeGenerateContent(ctx, p.location, p.projectID, bare, req)
+	}
 	return p.delegate.Chat(ctx, messages, tools, addPrefix(model), options)
 }
 
 // ChatStream implements StreamingProvider.ChatStream.
+//
+// Audio conversations are handled via a single non-streaming native call; a
+// single accumulated-content callback is fired once the response arrives.
 func (p *Provider) ChatStream(
 	ctx context.Context,
 	messages []Message,
@@ -144,10 +167,23 @@ func (p *Provider) ChatStream(
 	options map[string]any,
 	onChunk func(accumulated string),
 ) (*LLMResponse, error) {
+	if hasAudioContent(messages) {
+		resp, err := p.Chat(ctx, messages, tools, model, options)
+		if err != nil {
+			return nil, err
+		}
+		if onChunk != nil && resp.Content != "" {
+			onChunk(resp.Content)
+		}
+		return resp, nil
+	}
 	return p.delegate.ChatStream(ctx, messages, tools, addPrefix(model), options, onChunk)
 }
 
 // ChatStreamEvents implements StreamingProvider.ChatStreamEvents.
+//
+// Audio conversations are handled via a single non-streaming native call; the
+// final content is delivered as one StreamChunk before returning.
 func (p *Provider) ChatStreamEvents(
 	ctx context.Context,
 	messages []Message,
@@ -156,6 +192,16 @@ func (p *Provider) ChatStreamEvents(
 	options map[string]any,
 	onChunk func(StreamChunk),
 ) (*LLMResponse, error) {
+	if hasAudioContent(messages) {
+		resp, err := p.Chat(ctx, messages, tools, model, options)
+		if err != nil {
+			return nil, err
+		}
+		if onChunk != nil && resp.Content != "" {
+			onChunk(StreamChunk{Content: resp.Content})
+		}
+		return resp, nil
+	}
 	return p.delegate.ChatStreamEvents(ctx, messages, tools, addPrefix(model), options, onChunk)
 }
 
