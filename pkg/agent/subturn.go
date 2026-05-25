@@ -435,6 +435,11 @@ func spawnSubTurn(
 	// Register child turn state so GetAllActiveTurns/Subagents can find it
 	al.activeTurnStates.Store(childID, childTS)
 	defer al.activeTurnStates.Delete(childID)
+	defer func() {
+		if al.turnLock != nil {
+			al.turnLock.clearTurn(childID)
+		}
+	}()
 
 	// 5. Establish parent-child relationship (thread-safe)
 	parentTS.mu.Lock()

@@ -289,6 +289,9 @@ func (al *AgentLoop) registerActiveTurn(ts *turnState) {
 
 func (al *AgentLoop) clearActiveTurn(ts *turnState) {
 	al.activeTurnStates.Delete(ts.sessionKey)
+	if al.turnLock != nil {
+		al.turnLock.clearTurn(ts.turnID)
+	}
 }
 
 func (al *AgentLoop) getActiveTurnState(sessionKey string) *turnState {

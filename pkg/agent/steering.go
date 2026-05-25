@@ -387,22 +387,34 @@ func (al *AgentLoop) Continue(ctx context.Context, sessionKey, channel, chatID s
 
 	if err := al.ensureHooksInitialized(ctx); err != nil {
 		al.activeTurnStates.Delete(sessionKey)
+		if al.turnLock != nil {
+			al.turnLock.clearTurn(placeholder.turnID)
+		}
 		return "", err
 	}
 	if err := al.ensureMCPInitialized(ctx); err != nil {
 		al.activeTurnStates.Delete(sessionKey)
+		if al.turnLock != nil {
+			al.turnLock.clearTurn(placeholder.turnID)
+		}
 		return "", err
 	}
 
 	steeringMsgs := al.dequeueSteeringMessagesForScopeWithFallback(sessionKey)
 	if len(steeringMsgs) == 0 {
 		al.activeTurnStates.Delete(sessionKey)
+		if al.turnLock != nil {
+			al.turnLock.clearTurn(placeholder.turnID)
+		}
 		return "", nil
 	}
 
 	agent := al.agentForSession(sessionKey)
 	if agent == nil {
 		al.activeTurnStates.Delete(sessionKey)
+		if al.turnLock != nil {
+			al.turnLock.clearTurn(placeholder.turnID)
+		}
 		return "", fmt.Errorf("no agent available for session %q", sessionKey)
 	}
 

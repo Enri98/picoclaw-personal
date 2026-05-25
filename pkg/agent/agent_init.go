@@ -115,6 +115,15 @@ func NewAgentLoop(
 		al.usageHook = uh
 		_ = al.hooks.Mount(NamedHook("usage-tracker", uh))
 
+		tl := NewTurnLock()
+		al.turnLock = tl
+		_ = al.hooks.Mount(HookRegistration{
+			Name:     "turn-lock",
+			Priority: 100,
+			Source:   HookSourceInProcess,
+			Hook:     &turnLockHook{lock: tl},
+		})
+
 		if cfg.Tools.IsToolEnabled("wiki") && cfg.Tools.Wiki.Dir != "" {
 			al.wikiToolset = tools.NewWikiToolset(cfg.Tools.Wiki.Dir, defaultAgent.Workspace)
 		}

@@ -60,6 +60,7 @@ type AgentLoop struct {
 	hookRuntime    hookRuntime
 	circuitBreaker *CircuitBreaker
 	usageHook      *UsageHook
+	turnLock       *TurnLock
 	wikiToolset    *tools.WikiToolset
 	bashTool       *tools.BashTool
 	steering       *steeringQueue
@@ -222,6 +223,9 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 					// Context canceled while waiting for a slot — clean up the
 					// placeholder to prevent session-level deadlock.
 					al.activeTurnStates.Delete(sessionKey)
+					if al.turnLock != nil {
+						al.turnLock.clearTurn(placeholder.turnID)
+					}
 					return
 				}
 
@@ -258,6 +262,9 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 
 				if al.takePendingStop(sessionKey) {
 					al.activeTurnStates.Delete(sessionKey)
+					if al.turnLock != nil {
+						al.turnLock.clearTurn(placeholder.turnID)
+					}
 					target := &continuationTarget{
 						SessionKey: sessionKey,
 						Channel:    m.Channel,
