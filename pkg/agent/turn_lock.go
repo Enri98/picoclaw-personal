@@ -20,8 +20,8 @@ import (
 var untrustedFetchTools = map[string]bool{
 	"gmail_list_unread": true,
 	"gmail_get_body":    true,
-	// "outlook_list_unread":   true,  // chunk 8
-	// "outlook_get_body":      true,  // chunk 8
+	"outlook_list_unread": true,
+	"outlook_get_body":    true,
 	// "github_get_issue_body": true,  // chunk 10
 	// "link_fetch":            true,  // chunk 11
 }

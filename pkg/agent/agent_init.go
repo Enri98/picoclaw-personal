@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/agent/interfaces"
@@ -153,6 +154,21 @@ func NewAgentLoop(
 				} else {
 					al.gmailToolset = ts
 				}
+			}
+		}
+
+		if cfg.Tools.IsToolEnabled("outlook") {
+			clientID := os.Getenv("OUTLOOK_OAUTH_CLIENT_ID")
+			refreshToken := os.Getenv("OUTLOOK_REFRESH_TOKEN")
+			persistPath := filepath.Join(defaultAgent.Workspace, "state", "outlook_refresh_token")
+			if clientID == "" || refreshToken == "" {
+				logger.WarnCF("agent", "Outlook tool enabled but OUTLOOK_OAUTH_CLIENT_ID/OUTLOOK_REFRESH_TOKEN missing; skipping", nil)
+			} else if client, err := tools.NewOutlookGraphClient(context.Background(), clientID, refreshToken, persistPath); err != nil {
+				logger.WarnCF("agent", "Failed to construct Outlook client", map[string]any{"error": err.Error()})
+			} else if ts, err := tools.NewOutlookToolset(client); err != nil {
+				logger.WarnCF("agent", "Failed to construct Outlook toolset", map[string]any{"error": err.Error()})
+			} else {
+				al.outlookToolset = ts
 			}
 		}
 	}
@@ -442,6 +458,12 @@ func registerSharedTools(
 
 		if al.gmailToolset != nil {
 			for _, gt := range al.gmailToolset.Tools() {
+				agent.Tools.Register(gt)
+			}
+		}
+
+		if al.outlookToolset != nil {
+			for _, gt := range al.outlookToolset.Tools() {
 				agent.Tools.Register(gt)
 			}
 		}

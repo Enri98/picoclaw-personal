@@ -64,6 +64,7 @@ type AgentLoop struct {
 	wikiToolset    *tools.WikiToolset
 	bashTool       *tools.BashTool
 	gmailToolset   *tools.GmailToolset
+	outlookToolset *tools.OutlookToolset
 	steering       *steeringQueue
 	pendingSkills  sync.Map
 	pendingStops   sync.Map
