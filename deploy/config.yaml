@@ -1,0 +1,11 @@
+# PicoClaw deployment configuration — Pi Zero 2 W
+# Paths are absolute on the Pi filesystem.
+
+tools:
+  wiki:
+    dir: /home/picoclaw/wiki
+    enabled: true
+  web:
+    enabled: false
+  skills:
+    enabled: true
