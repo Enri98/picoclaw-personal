@@ -95,6 +95,22 @@ func NewAgentLoop(
 	al.providerFactory = providers.CreateProviderFromConfig
 	al.hooks = NewHookManager(al.runtimeEvents.Channel())
 	configureHookManagerFromConfig(al.hooks, cfg)
+	if defaultAgent != nil && defaultAgent.Workspace != "" {
+		alertFn := func(ctx context.Context, inbound *bus.InboundContext, msg string) {
+			if inbound == nil {
+				return
+			}
+			_ = msgBus.PublishOutbound(ctx, bus.OutboundMessage{
+				Channel: inbound.Channel,
+				ChatID:  inbound.ChatID,
+				Context: *inbound,
+				Content: msg,
+			})
+		}
+		cb := newCircuitBreaker(defaultAgent.Workspace, alertFn)
+		al.circuitBreaker = cb
+		_ = al.hooks.Mount(NamedHook("circuit-breaker", cb))
+	}
 	al.contextManager = al.resolveContextManager()
 
 	// Register shared tools to all agents (now that al is created)

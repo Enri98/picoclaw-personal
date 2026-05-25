@@ -32,6 +32,21 @@ func (al *AgentLoop) handleCommand(
 		return reply, handled
 	}
 
+	if cmd, ok := commands.CommandName(msg.Content); ok {
+		switch cmd {
+		case "panic":
+			if al.circuitBreaker != nil {
+				al.circuitBreaker.Activate()
+			}
+			return "Panic mode activated. All LLM/tool processing halted. Use /resume to re-enable.", true
+		case "resume":
+			if al.circuitBreaker != nil {
+				al.circuitBreaker.Deactivate()
+			}
+			return "Circuit breaker reset. Processing re-enabled.", true
+		}
+	}
+
 	if al.cmdRegistry == nil {
 		return "", false
 	}

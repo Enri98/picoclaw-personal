@@ -57,6 +57,7 @@ type AgentLoop struct {
 	mcp            mcpRuntime
 	evolution      *evolutionBridge
 	hookRuntime    hookRuntime
+	circuitBreaker *CircuitBreaker
 	steering       *steeringQueue
 	pendingSkills  sync.Map
 	pendingStops   sync.Map
