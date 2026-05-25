@@ -1007,6 +1007,16 @@ type WikiToolsConfig struct {
 	Enabled bool   `json:"enabled" yaml:"enabled,omitempty" env:"PICOCLAW_TOOLS_WIKI_ENABLED"`
 }
 
+type GmailToolsConfig struct {
+	Enabled  bool                 `json:"enabled" yaml:"enabled"`
+	Accounts []GmailAccountConfig `json:"accounts" yaml:"accounts,omitempty"`
+}
+
+type GmailAccountConfig struct {
+	Name            string `json:"name" yaml:"name"`
+	RefreshTokenEnv string `json:"refresh_token_env" yaml:"refresh_token_env"`
+}
+
 type ToolsConfig struct {
 	AllowReadPaths  []string `json:"allow_read_paths"  yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_READ_PATHS"`
 	AllowWritePaths []string `json:"allow_write_paths" yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_WRITE_PATHS"`
@@ -1023,6 +1033,7 @@ type ToolsConfig struct {
 	Exec            ExecConfig         `json:"exec"              yaml:"-"`
 	Skills          SkillsToolsConfig  `json:"skills"            yaml:"skills,omitempty"`
 	Wiki            WikiToolsConfig    `json:"wiki"              yaml:"wiki,omitempty"`
+	Gmail           GmailToolsConfig   `json:"gmail"             yaml:"gmail,omitempty"`
 	MediaCleanup    MediaCleanupConfig `json:"media_cleanup"     yaml:"-"`
 	MCP             MCPConfig          `json:"mcp"               yaml:"-"`
 	AppendFile      ToolConfig         `json:"append_file"       yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_APPEND_FILE_"`
@@ -1808,6 +1819,8 @@ func (t *ToolsConfig) IsToolEnabled(name string) bool {
 		return t.MCP.Enabled
 	case "wiki":
 		return t.Wiki.Enabled
+	case "gmail":
+		return t.Gmail.Enabled
 	default:
 		return true
 	}

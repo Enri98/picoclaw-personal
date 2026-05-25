@@ -11,3 +11,10 @@ tools:
     enabled: false
   skills:
     enabled: true
+  gmail:
+    enabled: true
+    accounts:
+      - name: darra2
+        refresh_token_env: GMAIL_REFRESH_TOKEN_DARRA2
+      - name: chiunque
+        refresh_token_env: GMAIL_REFRESH_TOKEN_CHIUNQUE

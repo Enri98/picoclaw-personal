@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/agent/interfaces"
@@ -130,6 +131,29 @@ func NewAgentLoop(
 
 		if cfg.Tools.IsToolEnabled("bash") {
 			al.bashTool = tools.NewBashTool(defaultAgent.Workspace, nil)
+		}
+
+		if cfg.Tools.IsToolEnabled("gmail") && len(cfg.Tools.Gmail.Accounts) > 0 {
+			clientID := os.Getenv("GMAIL_OAUTH_CLIENT_ID")
+			clientSecret := os.Getenv("GMAIL_OAUTH_CLIENT_SECRET")
+			if clientID == "" || clientSecret == "" {
+				logger.WarnCF("agent", "Gmail tool enabled but GMAIL_OAUTH_CLIENT_ID/SECRET env vars missing; skipping", nil)
+			} else {
+				accounts := make([]tools.GmailAccount, 0, len(cfg.Tools.Gmail.Accounts))
+				accMap := make(map[string]tools.GmailAccount)
+				for _, a := range cfg.Tools.Gmail.Accounts {
+					ga := tools.GmailAccount{Name: a.Name, RefreshTokenEnv: a.RefreshTokenEnv}
+					accounts = append(accounts, ga)
+					accMap[a.Name] = ga
+				}
+				if client, err := tools.NewGmailAPIClient(context.Background(), clientID, clientSecret, accMap); err != nil {
+					logger.WarnCF("agent", "Failed to construct Gmail client", map[string]any{"error": err.Error()})
+				} else if ts, err := tools.NewGmailToolset(accounts, client); err != nil {
+					logger.WarnCF("agent", "Failed to construct Gmail toolset", map[string]any{"error": err.Error()})
+				} else {
+					al.gmailToolset = ts
+				}
+			}
 		}
 	}
 	al.contextManager = al.resolveContextManager()
@@ -414,6 +438,12 @@ func registerSharedTools(
 
 		if al.bashTool != nil {
 			agent.Tools.Register(al.bashTool)
+		}
+
+		if al.gmailToolset != nil {
+			for _, gt := range al.gmailToolset.Tools() {
+				agent.Tools.Register(gt)
+			}
 		}
 
 		warnOnUnknownAgentToolDeclarations(agentID, agent.Workspace, agent.Definition, agent.Tools)

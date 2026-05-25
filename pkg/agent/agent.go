@@ -63,6 +63,7 @@ type AgentLoop struct {
 	turnLock       *TurnLock
 	wikiToolset    *tools.WikiToolset
 	bashTool       *tools.BashTool
+	gmailToolset   *tools.GmailToolset
 	steering       *steeringQueue
 	pendingSkills  sync.Map
 	pendingStops   sync.Map
