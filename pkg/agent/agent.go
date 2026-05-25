@@ -65,6 +65,7 @@ type AgentLoop struct {
 	bashTool       *tools.BashTool
 	gmailToolset   *tools.GmailToolset
 	outlookToolset *tools.OutlookToolset
+	gcalToolset    *tools.GCalToolset
 	steering       *steeringQueue
 	pendingSkills  sync.Map
 	pendingStops   sync.Map

@@ -171,6 +171,25 @@ func NewAgentLoop(
 				al.outlookToolset = ts
 			}
 		}
+
+		if cfg.Tools.IsToolEnabled("gcal") {
+			clientID := os.Getenv("GMAIL_OAUTH_CLIENT_ID")
+			clientSecret := os.Getenv("GMAIL_OAUTH_CLIENT_SECRET")
+			refreshToken := os.Getenv("GCAL_REFRESH_TOKEN")
+			calendarID := cfg.Tools.GCal.CalendarID
+			if calendarID == "" {
+				calendarID = "primary"
+			}
+			if clientID == "" || clientSecret == "" || refreshToken == "" {
+				logger.WarnCF("agent", "GCal tool enabled but GMAIL_OAUTH_CLIENT_ID/SECRET or GCAL_REFRESH_TOKEN missing; skipping", nil)
+			} else if client, err := tools.NewGCalAPIClient(context.Background(), clientID, clientSecret, refreshToken); err != nil {
+				logger.WarnCF("agent", "Failed to construct GCal client", map[string]any{"error": err.Error()})
+			} else if ts, err := tools.NewGCalToolset(client, calendarID, defaultAgent.Workspace); err != nil {
+				logger.WarnCF("agent", "Failed to construct GCal toolset", map[string]any{"error": err.Error()})
+			} else {
+				al.gcalToolset = ts
+			}
+		}
 	}
 	al.contextManager = al.resolveContextManager()
 
@@ -464,6 +483,12 @@ func registerSharedTools(
 
 		if al.outlookToolset != nil {
 			for _, gt := range al.outlookToolset.Tools() {
+				agent.Tools.Register(gt)
+			}
+		}
+
+		if al.gcalToolset != nil {
+			for _, gt := range al.gcalToolset.Tools() {
 				agent.Tools.Register(gt)
 			}
 		}

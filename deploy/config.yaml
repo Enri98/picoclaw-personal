@@ -20,3 +20,6 @@ tools:
         refresh_token_env: GMAIL_REFRESH_TOKEN_CHIUNQUE
   outlook:
     enabled: true
+  gcal:
+    enabled: true
+    calendar_id: primary

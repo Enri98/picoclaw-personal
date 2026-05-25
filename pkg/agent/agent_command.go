@@ -87,6 +87,28 @@ func (al *AgentLoop) handleCommand(
 			default:
 				return fmt.Sprintf("Unknown wiki subcommand: %s", parts[1]), true
 			}
+		case "agenda":
+			if al.gcalToolset == nil {
+				return "Calendar not configured.", true
+			}
+			if al.circuitBreaker != nil {
+				if ok, reason := al.circuitBreaker.CheckTool(); !ok {
+					return fmt.Sprintf("Blocked: %s", reason), true
+				}
+			}
+			events, err := al.gcalToolset.TodayDirect(ctx)
+			if err != nil {
+				return fmt.Sprintf("Agenda failed: %s", err.Error()), true
+			}
+			if len(events) == 0 {
+				return "No events today.", true
+			}
+			var sb strings.Builder
+			sb.WriteString("Today:\n")
+			for _, e := range events {
+				fmt.Fprintf(&sb, "  %s — %s\n", e.Start.Format("15:04"), e.Title)
+			}
+			return sb.String(), true
 		case "apply":
 			parts := strings.Fields(strings.TrimSpace(msg.Content))
 			if len(parts) < 2 {
@@ -156,16 +178,25 @@ func (al *AgentLoop) handleCommand(
 	}
 }
 
-// applyProposal tries the wiki proposal store first, then the bash store. The
-// two stores share a flat UUIDv4 keyspace so collisions are astronomically
-// unlikely; we route on "no active proposal" to fall through cleanly.
+// applyProposal walks the configured proposal stores (wiki → bash → gcal) and
+// applies whichever one holds the given UUIDv4. The stores share a flat
+// keyspace so collisions are astronomically unlikely. A load/parse error in
+// an earlier store (e.g. a truncated JSON file) is logged but does NOT
+// short-circuit the chain — the user's proposal in a later store would
+// otherwise become permanently inapplicable until the corrupt store was
+// fixed manually.
 func (al *AgentLoop) applyProposal(ctx context.Context, id string) string {
+	var lastNonFatal string
 	if al.wikiToolset != nil {
 		reply, err := al.wikiToolset.ApplyProposal(id)
 		if err == nil {
 			return reply
 		}
-		if !strings.Contains(err.Error(), "no active proposal") {
+		if isProposalNotFound(err) {
+			// Empty store; try next.
+		} else if isStoreLoadError(err) {
+			logger.WarnCF("agent", "wiki proposal store error during /apply; trying next store", map[string]any{"error": err.Error()})
+		} else {
 			return fmt.Sprintf("Apply failed: %s", err.Error())
 		}
 	}
@@ -179,14 +210,63 @@ func (al *AgentLoop) applyProposal(ctx context.Context, id string) string {
 		if err == nil {
 			return formatRunResultForUser(result)
 		}
-		if !strings.Contains(err.Error(), "no active proposal") {
+		if isProposalNotFound(err) {
+			// try next
+		} else if isStoreLoadError(err) {
+			logger.WarnCF("agent", "bash proposal store error during /apply; trying next store", map[string]any{"error": err.Error()})
+		} else {
+			lastNonFatal = err.Error()
+		}
+	}
+	if al.gcalToolset != nil {
+		if al.circuitBreaker != nil {
+			if ok, reason := al.circuitBreaker.CheckTool(); !ok {
+				return fmt.Sprintf("Blocked: %s", reason)
+			}
+		}
+		ev, err := al.gcalToolset.Proposals().Apply(ctx, id)
+		if err == nil {
+			return fmt.Sprintf("Created event: %s at %s", ev.Title, ev.Start.Format(time.RFC1123))
+		}
+		if isProposalNotFound(err) {
+			// fall through to final message
+		} else if isStoreLoadError(err) {
+			logger.WarnCF("agent", "gcal proposal store error during /apply", map[string]any{"error": err.Error()})
+			lastNonFatal = err.Error()
+		} else {
 			return fmt.Sprintf("Apply failed: %s", err.Error())
 		}
 	}
-	if al.wikiToolset == nil && al.bashTool == nil {
+	if al.wikiToolset == nil && al.bashTool == nil && al.gcalToolset == nil {
 		return "No proposal stores configured."
 	}
+	if lastNonFatal != "" {
+		return fmt.Sprintf("No active proposal with ID %s (also: %s)", id, lastNonFatal)
+	}
 	return fmt.Sprintf("No active proposal with ID %s", id)
+}
+
+// isProposalNotFound matches the canonical "no active proposal with ID" error
+// used by every proposal store. Any other error is either a load/parse error
+// in the store backing file or a real apply-time failure.
+func isProposalNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "no active proposal")
+}
+
+// isStoreLoadError matches errors raised by load/save of the on-disk JSON
+// backing file (typically truncated or non-UTF8 corruption). These should not
+// short-circuit the apply chain because a later store might still hold the ID.
+func isStoreLoadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "failed to load proposals") ||
+		strings.Contains(msg, "failed to remove proposal") ||
+		strings.Contains(msg, "failed to update proposals")
 }
 
 func (al *AgentLoop) rejectProposal(id string) string {
@@ -195,18 +275,31 @@ func (al *AgentLoop) rejectProposal(id string) string {
 		if err == nil {
 			return reply
 		}
-		if !strings.Contains(err.Error(), "no active proposal") {
+		if isStoreLoadError(err) {
+			logger.WarnCF("agent", "wiki proposal store error during /reject; trying next store", map[string]any{"error": err.Error()})
+		} else if !isProposalNotFound(err) {
 			return fmt.Sprintf("Reject failed: %s", err.Error())
 		}
 	}
 	if al.bashTool != nil {
 		if err := al.bashTool.Proposals().Reject(id); err == nil {
 			return fmt.Sprintf("Rejected proposal %s.", id)
-		} else if !strings.Contains(err.Error(), "no active proposal") {
+		} else if isStoreLoadError(err) {
+			logger.WarnCF("agent", "bash proposal store error during /reject; trying next store", map[string]any{"error": err.Error()})
+		} else if !isProposalNotFound(err) {
 			return fmt.Sprintf("Reject failed: %s", err.Error())
 		}
 	}
-	if al.wikiToolset == nil && al.bashTool == nil {
+	if al.gcalToolset != nil {
+		if err := al.gcalToolset.Proposals().Reject(id); err == nil {
+			return fmt.Sprintf("Rejected proposal %s.", id)
+		} else if isStoreLoadError(err) {
+			logger.WarnCF("agent", "gcal proposal store error during /reject", map[string]any{"error": err.Error()})
+		} else if !isProposalNotFound(err) {
+			return fmt.Sprintf("Reject failed: %s", err.Error())
+		}
+	}
+	if al.wikiToolset == nil && al.bashTool == nil && al.gcalToolset == nil {
 		return "No proposal stores configured."
 	}
 	return fmt.Sprintf("No active proposal with ID %s", id)
