@@ -40,11 +40,9 @@ ifeq ($(OS),Windows_NT)
 	POWERSHELL = powershell -NoProfile -Command
 endif
 
-.PHONY: all build-pi _prepare-workspace deploy-binary deploy-skills deploy-config deploy logs rollback
+.PHONY: all build-pi build-runshell _prepare-workspace deploy-binary deploy-skills deploy-config deploy logs rollback
 
-all: build-pi
-
-# TODO: add picoclaw-runshell to build-pi and deploy-binary once cmd/picoclaw-runshell is implemented
+all: build-pi build-runshell
 
 ## _prepare-workspace: Populate the embedded workspace (go generate)
 ifeq ($(OS),Windows_NT)
@@ -82,13 +80,40 @@ build-pi: _prepare-workspace
 	@echo "Binary: $(BUILD_DIR)/picoclaw-$(GOARCH)"
 endif
 
-## deploy-binary: Build then install binary on Pi via SSH/SCP
-deploy-binary: build-pi
+## build-runshell: Cross-compile the privsep helper for linux/arm64
+ifeq ($(OS),Windows_NT)
+build-runshell:
+	@echo "Building picoclaw-runshell for $(GOOS)/$(GOARCH) ..."
+	$(POWERSHELL) "\
+		$$env:GOOS='$(GOOS)'; \
+		$$env:GOARCH='$(GOARCH)'; \
+		$$env:CGO_ENABLED='0'; \
+		New-Item -ItemType Directory -Force -Path '$(BUILD_DIR)' | Out-Null; \
+		go build -ldflags '$(LDFLAGS)' \
+		  -o '$(BUILD_DIR)/picoclaw-runshell-$(GOARCH)' ./cmd/picoclaw-runshell"
+	@echo "Binary: $(BUILD_DIR)/picoclaw-runshell-$(GOARCH)"
+else
+build-runshell:
+	@echo "Building picoclaw-runshell for $(GOOS)/$(GOARCH) ..."
+	mkdir -p $(BUILD_DIR)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 \
+		go build \
+		-ldflags "$(LDFLAGS)" \
+		-o $(BUILD_DIR)/picoclaw-runshell-$(GOARCH) \
+		./cmd/picoclaw-runshell
+	@echo "Binary: $(BUILD_DIR)/picoclaw-runshell-$(GOARCH)"
+endif
+
+## deploy-binary: Build then install binaries on Pi via SSH/SCP
+deploy-binary: build-pi build-runshell
 	ssh $(PI_HOST) 'sudo cp /usr/local/bin/picoclaw /usr/local/bin/picoclaw.prev 2>/dev/null || true'
+	ssh $(PI_HOST) 'sudo cp /usr/local/bin/picoclaw-runshell /usr/local/bin/picoclaw-runshell.prev 2>/dev/null || true'
 	scp $(BUILD_DIR)/picoclaw-$(GOARCH)           $(PI_HOST):/tmp/picoclaw.new
+	scp $(BUILD_DIR)/picoclaw-runshell-$(GOARCH)  $(PI_HOST):/tmp/picoclaw-runshell.new
 	ssh $(PI_HOST) '\
 		sudo mv /tmp/picoclaw.new /usr/local/bin/picoclaw && \
-		sudo chmod +x /usr/local/bin/picoclaw && \
+		sudo mv /tmp/picoclaw-runshell.new /usr/local/bin/picoclaw-runshell && \
+		sudo chmod +x /usr/local/bin/picoclaw /usr/local/bin/picoclaw-runshell && \
 		sudo systemctl restart picoclaw'
 
 ## deploy-skills: Sync built-in skills to the Pi workspace
@@ -107,9 +132,12 @@ deploy: deploy-binary deploy-skills deploy-config
 logs:
 	ssh $(PI_HOST) 'sudo journalctl -u picoclaw -f'
 
-## rollback: Stop picoclaw, restore previous binary, restart
+## rollback: Stop picoclaw, restore previous binaries, restart
 rollback:
 	ssh $(PI_HOST) '\
 		sudo systemctl stop picoclaw && \
 		sudo cp /usr/local/bin/picoclaw.prev /usr/local/bin/picoclaw && \
+		if [ -f /usr/local/bin/picoclaw-runshell.prev ]; then \
+		  sudo cp /usr/local/bin/picoclaw-runshell.prev /usr/local/bin/picoclaw-runshell; \
+		fi && \
 		sudo systemctl start picoclaw'

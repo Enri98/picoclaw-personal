@@ -15,6 +15,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
 func (al *AgentLoop) handleCommand(
@@ -87,31 +88,38 @@ func (al *AgentLoop) handleCommand(
 				return fmt.Sprintf("Unknown wiki subcommand: %s", parts[1]), true
 			}
 		case "apply":
-			if al.wikiToolset == nil {
-				return "Wiki not configured.", true
-			}
 			parts := strings.Fields(strings.TrimSpace(msg.Content))
 			if len(parts) < 2 {
 				return "Usage: /apply <proposal-id>", true
 			}
-			reply, err := al.wikiToolset.ApplyProposal(parts[1])
-			if err != nil {
-				return fmt.Sprintf("Apply failed: %s", err.Error()), true
-			}
-			return reply, true
+			return al.applyProposal(ctx, parts[1]), true
 		case "reject":
-			if al.wikiToolset == nil {
-				return "Wiki not configured.", true
-			}
 			parts := strings.Fields(strings.TrimSpace(msg.Content))
 			if len(parts) < 2 {
 				return "Usage: /reject <proposal-id>", true
 			}
-			reply, err := al.wikiToolset.RejectProposal(parts[1])
-			if err != nil {
-				return fmt.Sprintf("Reject failed: %s", err.Error()), true
+			return al.rejectProposal(parts[1]), true
+		case "sh":
+			if al.bashTool == nil {
+				return "Bash tool not configured.", true
 			}
-			return reply, true
+			parts := strings.SplitN(strings.TrimSpace(msg.Content), " ", 2)
+			if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+				return "Usage: /sh <command>", true
+			}
+			if al.circuitBreaker != nil {
+				if ok, reason := al.circuitBreaker.CheckTool(); !ok {
+					return fmt.Sprintf("Blocked: %s", reason), true
+				}
+			}
+			result := al.bashTool.Execute(ctx, map[string]any{"cmd": parts[1]})
+			if result == nil {
+				return "Bash tool returned no result.", true
+			}
+			if result.ForUser != "" {
+				return result.ForUser, true
+			}
+			return result.ForLLM, true
 		}
 	}
 
@@ -146,6 +154,80 @@ func (al *AgentLoop) handleCommand(
 	default: // OutcomePassthrough — let the message fall through to LLM
 		return "", false
 	}
+}
+
+// applyProposal tries the wiki proposal store first, then the bash store. The
+// two stores share a flat UUIDv4 keyspace so collisions are astronomically
+// unlikely; we route on "no active proposal" to fall through cleanly.
+func (al *AgentLoop) applyProposal(ctx context.Context, id string) string {
+	if al.wikiToolset != nil {
+		reply, err := al.wikiToolset.ApplyProposal(id)
+		if err == nil {
+			return reply
+		}
+		if !strings.Contains(err.Error(), "no active proposal") {
+			return fmt.Sprintf("Apply failed: %s", err.Error())
+		}
+	}
+	if al.bashTool != nil {
+		if al.circuitBreaker != nil {
+			if ok, reason := al.circuitBreaker.CheckTool(); !ok {
+				return fmt.Sprintf("Blocked: %s", reason)
+			}
+		}
+		result, err := al.bashTool.Proposals().Apply(ctx, id)
+		if err == nil {
+			return formatRunResultForUser(result)
+		}
+		if !strings.Contains(err.Error(), "no active proposal") {
+			return fmt.Sprintf("Apply failed: %s", err.Error())
+		}
+	}
+	if al.wikiToolset == nil && al.bashTool == nil {
+		return "No proposal stores configured."
+	}
+	return fmt.Sprintf("No active proposal with ID %s", id)
+}
+
+func (al *AgentLoop) rejectProposal(id string) string {
+	if al.wikiToolset != nil {
+		reply, err := al.wikiToolset.RejectProposal(id)
+		if err == nil {
+			return reply
+		}
+		if !strings.Contains(err.Error(), "no active proposal") {
+			return fmt.Sprintf("Reject failed: %s", err.Error())
+		}
+	}
+	if al.bashTool != nil {
+		if err := al.bashTool.Proposals().Reject(id); err == nil {
+			return fmt.Sprintf("Rejected proposal %s.", id)
+		} else if !strings.Contains(err.Error(), "no active proposal") {
+			return fmt.Sprintf("Reject failed: %s", err.Error())
+		}
+	}
+	if al.wikiToolset == nil && al.bashTool == nil {
+		return "No proposal stores configured."
+	}
+	return fmt.Sprintf("No active proposal with ID %s", id)
+}
+
+func formatRunResultForUser(r tools.RunResult) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "exit_code: %d\n", r.ExitCode)
+	if r.Stdout != "" {
+		fmt.Fprintf(&sb, "stdout:\n%s\n", r.Stdout)
+	}
+	if r.Stderr != "" {
+		fmt.Fprintf(&sb, "stderr:\n%s\n", r.Stderr)
+	}
+	if r.TimedOut {
+		sb.WriteString("[WARNING: command timed out]\n")
+	}
+	if r.Truncated {
+		sb.WriteString("[WARNING: output was truncated]\n")
+	}
+	return sb.String()
 }
 
 func (al *AgentLoop) applyExplicitSkillCommand(

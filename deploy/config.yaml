@@ -5,6 +5,8 @@ tools:
   wiki:
     dir: /home/picoclaw/wiki
     enabled: true
+  bash:
+    enabled: true
   web:
     enabled: false
   skills:

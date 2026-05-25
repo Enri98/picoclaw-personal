@@ -61,6 +61,7 @@ type AgentLoop struct {
 	circuitBreaker *CircuitBreaker
 	usageHook      *UsageHook
 	wikiToolset    *tools.WikiToolset
+	bashTool       *tools.BashTool
 	steering       *steeringQueue
 	pendingSkills  sync.Map
 	pendingStops   sync.Map

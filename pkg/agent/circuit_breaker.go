@@ -123,6 +123,17 @@ func (cb *CircuitBreaker) checkAndRecordLLM(now time.Time) (ok bool, reason stri
 	return true, "", false
 }
 
+// CheckTool gates a non-LLM direct tool invocation (e.g. /sh) on both the
+// panic flag and the tool-per-minute rate limit. Returns (true, "") when the
+// call may proceed.
+func (cb *CircuitBreaker) CheckTool() (ok bool, reason string) {
+	if _, err := os.Stat(cb.panicFile); err == nil {
+		return false, "panic mode active — use /resume to re-enable"
+	}
+	ok, reason, _ = cb.checkAndRecordTool(time.Now())
+	return ok, reason
+}
+
 // checkAndRecordTool checks and records a tool call under the rate limit.
 func (cb *CircuitBreaker) checkAndRecordTool(now time.Time) (ok bool, reason string, shouldAlert bool) {
 	cb.mu.Lock()

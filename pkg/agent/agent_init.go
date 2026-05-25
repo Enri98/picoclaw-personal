@@ -118,6 +118,10 @@ func NewAgentLoop(
 		if cfg.Tools.IsToolEnabled("wiki") && cfg.Tools.Wiki.Dir != "" {
 			al.wikiToolset = tools.NewWikiToolset(cfg.Tools.Wiki.Dir, defaultAgent.Workspace)
 		}
+
+		if cfg.Tools.IsToolEnabled("bash") {
+			al.bashTool = tools.NewBashTool(defaultAgent.Workspace, nil)
+		}
 	}
 	al.contextManager = al.resolveContextManager()
 
@@ -397,6 +401,10 @@ func registerSharedTools(
 			for _, wt := range al.wikiToolset.Tools() {
 				agent.Tools.Register(wt)
 			}
+		}
+
+		if al.bashTool != nil {
+			agent.Tools.Register(al.bashTool)
 		}
 
 		warnOnUnknownAgentToolDeclarations(agentID, agent.Workspace, agent.Definition, agent.Tools)

@@ -1,0 +1,17 @@
+# picoclaw-shell sudoers fragment
+#
+# Install on the Pi:
+#   sudo cp deploy/sudoers.picoclaw-shell /etc/sudoers.d/picoclaw-shell
+#   sudo chown root:root /etc/sudoers.d/picoclaw-shell
+#   sudo chmod 0440      /etc/sudoers.d/picoclaw-shell
+#   sudo visudo -c -f    /etc/sudoers.d/picoclaw-shell   # MUST pass before reload
+#
+# After install, the picoclaw user can invoke the runshell helper as
+# picoclaw-shell with no password prompt. No other commands are permitted.
+#
+# Defense in depth: scrub the entire environment for this specific command so
+# secrets loaded into picoclaw's process (TELEGRAM_BOT_TOKEN, GMAIL_REFRESH_TOKEN,
+# etc.) cannot leak into the runshell child even if a future operator changes
+# the global Defaults env_reset setting.
+Defaults!/usr/local/bin/picoclaw-runshell env_reset, env_keep=""
+picoclaw ALL=(picoclaw-shell) NOPASSWD: /usr/local/bin/picoclaw-runshell
