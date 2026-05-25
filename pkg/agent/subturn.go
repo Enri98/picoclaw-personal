@@ -435,6 +435,9 @@ func spawnSubTurn(
 	// Register child turn state so GetAllActiveTurns/Subagents can find it
 	al.activeTurnStates.Store(childID, childTS)
 	defer al.activeTurnStates.Delete(childID)
+	if al.turnLock != nil {
+		al.turnLock.RegisterChild(childID, parentTS.turnID)
+	}
 	defer func() {
 		if al.turnLock != nil {
 			al.turnLock.clearTurn(childID)

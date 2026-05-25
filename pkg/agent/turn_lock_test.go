@@ -154,3 +154,47 @@ func TestTurnLockHook_AfterTool_IgnoresEmptyTurnID(t *testing.T) {
 		t.Fatal("expected empty TurnID to not be locked")
 	}
 }
+
+// When a grandchild sub-turn fires an untrusted fetch, the lock must propagate
+// up the full ancestry chain so the root inbound turn cannot write either.
+func TestTurnLock_DeepAncestry(t *testing.T) {
+	l := NewTurnLock()
+	l.RegisterChild("child", "root")
+	l.RegisterChild("grandchild", "child")
+
+	h := &turnLockHook{lock: l}
+	result := &ToolResultHookResponse{
+		Meta: HookMeta{TurnID: "grandchild", ParentTurnID: "child"},
+		Tool: "test_untrusted_fetch",
+	}
+	if _, _, err := h.AfterTool(context.Background(), result); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"grandchild", "child", "root"} {
+		if !l.IsLocked(id) {
+			t.Errorf("expected %s to be locked via ancestry walk", id)
+		}
+	}
+}
+
+// When an untrusted-fetch tool fires inside a sub-turn, the parent turn's next
+// LLM iteration will see the fetched content in its context. Both the
+// sub-turn and the parent must therefore be locked.
+func TestTurnLockHook_AfterTool_LocksParentTurn(t *testing.T) {
+	l := NewTurnLock()
+	h := &turnLockHook{lock: l}
+
+	result := &ToolResultHookResponse{
+		Meta: HookMeta{TurnID: "child-1", ParentTurnID: "parent-1"},
+		Tool: "test_untrusted_fetch",
+	}
+	if _, _, err := h.AfterTool(context.Background(), result); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !l.IsLocked("child-1") {
+		t.Fatal("expected child-1 to be locked")
+	}
+	if !l.IsLocked("parent-1") {
+		t.Fatal("expected parent-1 to be locked (sub-turn fetch must propagate up)")
+	}
+}
