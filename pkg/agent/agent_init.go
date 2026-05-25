@@ -110,6 +110,14 @@ func NewAgentLoop(
 		cb := newCircuitBreaker(defaultAgent.Workspace, alertFn)
 		al.circuitBreaker = cb
 		_ = al.hooks.Mount(NamedHook("circuit-breaker", cb))
+
+		uh := newUsageHook(defaultAgent.Workspace)
+		al.usageHook = uh
+		_ = al.hooks.Mount(NamedHook("usage-tracker", uh))
+
+		if cfg.Tools.IsToolEnabled("wiki") && cfg.Tools.Wiki.Dir != "" {
+			al.wikiToolset = tools.NewWikiToolset(cfg.Tools.Wiki.Dir, defaultAgent.Workspace)
+		}
 	}
 	al.contextManager = al.resolveContextManager()
 
@@ -383,6 +391,12 @@ func registerSharedTools(
 				return registry.CanSpawnSubagent(currentAgentID, targetAgentID)
 			})
 			agent.Tools.Register(delegateTool)
+		}
+
+		if al.wikiToolset != nil {
+			for _, wt := range al.wikiToolset.Tools() {
+				agent.Tools.Register(wt)
+			}
 		}
 
 		warnOnUnknownAgentToolDeclarations(agentID, agent.Workspace, agent.Definition, agent.Tools)

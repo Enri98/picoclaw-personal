@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/commands"
@@ -44,6 +45,73 @@ func (al *AgentLoop) handleCommand(
 				al.circuitBreaker.Deactivate()
 			}
 			return "Circuit breaker reset. Processing re-enabled.", true
+		case "receipt":
+			if al.usageHook == nil {
+				return "Usage tracking not initialized.", true
+			}
+			date := time.Now().UTC()
+			parts := strings.Fields(strings.TrimSpace(msg.Content))
+			if len(parts) >= 2 {
+				if t, err := time.Parse("2006-01-02", parts[1]); err == nil {
+					date = t.UTC()
+				} else {
+					return fmt.Sprintf("Invalid date %q — use YYYY-MM-DD.", parts[1]), true
+				}
+			}
+			return al.usageHook.FormatReceipt(date), true
+		case "note":
+			if al.wikiToolset == nil {
+				return "Wiki not configured.", true
+			}
+			parts := strings.SplitN(strings.TrimSpace(msg.Content), " ", 2)
+			if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+				return "Usage: /note <text>", true
+			}
+			reply, err := al.wikiToolset.AppendToInbox(parts[1], "telegram")
+			if err != nil {
+				return fmt.Sprintf("Note failed: %s", err.Error()), true
+			}
+			return reply, true
+		case "wiki":
+			if al.wikiToolset == nil {
+				return "Wiki not configured.", true
+			}
+			parts := strings.Fields(strings.TrimSpace(msg.Content))
+			if len(parts) < 2 {
+				return "Usage: /wiki <subcommand>  (subcommands: proposals)", true
+			}
+			switch strings.ToLower(parts[1]) {
+			case "proposals":
+				return al.wikiToolset.ListProposals(), true
+			default:
+				return fmt.Sprintf("Unknown wiki subcommand: %s", parts[1]), true
+			}
+		case "apply":
+			if al.wikiToolset == nil {
+				return "Wiki not configured.", true
+			}
+			parts := strings.Fields(strings.TrimSpace(msg.Content))
+			if len(parts) < 2 {
+				return "Usage: /apply <proposal-id>", true
+			}
+			reply, err := al.wikiToolset.ApplyProposal(parts[1])
+			if err != nil {
+				return fmt.Sprintf("Apply failed: %s", err.Error()), true
+			}
+			return reply, true
+		case "reject":
+			if al.wikiToolset == nil {
+				return "Wiki not configured.", true
+			}
+			parts := strings.Fields(strings.TrimSpace(msg.Content))
+			if len(parts) < 2 {
+				return "Usage: /reject <proposal-id>", true
+			}
+			reply, err := al.wikiToolset.RejectProposal(parts[1])
+			if err != nil {
+				return fmt.Sprintf("Reject failed: %s", err.Error()), true
+			}
+			return reply, true
 		}
 	}
 

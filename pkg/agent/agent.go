@@ -28,6 +28,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/routing"
 	"github.com/sipeed/picoclaw/pkg/session"
 	"github.com/sipeed/picoclaw/pkg/state"
+	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
@@ -58,6 +59,8 @@ type AgentLoop struct {
 	evolution      *evolutionBridge
 	hookRuntime    hookRuntime
 	circuitBreaker *CircuitBreaker
+	usageHook      *UsageHook
+	wikiToolset    *tools.WikiToolset
 	steering       *steeringQueue
 	pendingSkills  sync.Map
 	pendingStops   sync.Map

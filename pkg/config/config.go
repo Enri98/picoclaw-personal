@@ -1002,6 +1002,11 @@ func (c ReadFileToolConfig) EffectiveMode() string {
 	}
 }
 
+type WikiToolsConfig struct {
+	Dir     string `json:"dir"     yaml:"dir,omitempty"     env:"PICOCLAW_TOOLS_WIKI_DIR"`
+	Enabled bool   `json:"enabled" yaml:"enabled,omitempty" env:"PICOCLAW_TOOLS_WIKI_ENABLED"`
+}
+
 type ToolsConfig struct {
 	AllowReadPaths  []string `json:"allow_read_paths"  yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_READ_PATHS"`
 	AllowWritePaths []string `json:"allow_write_paths" yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_WRITE_PATHS"`
@@ -1017,6 +1022,7 @@ type ToolsConfig struct {
 	Cron            CronToolsConfig    `json:"cron"              yaml:"-"`
 	Exec            ExecConfig         `json:"exec"              yaml:"-"`
 	Skills          SkillsToolsConfig  `json:"skills"            yaml:"skills,omitempty"`
+	Wiki            WikiToolsConfig    `json:"wiki"              yaml:"wiki,omitempty"`
 	MediaCleanup    MediaCleanupConfig `json:"media_cleanup"     yaml:"-"`
 	MCP             MCPConfig          `json:"mcp"               yaml:"-"`
 	AppendFile      ToolConfig         `json:"append_file"       yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_APPEND_FILE_"`
@@ -1800,6 +1806,8 @@ func (t *ToolsConfig) IsToolEnabled(name string) bool {
 		return t.WriteFile.Enabled
 	case "mcp":
 		return t.MCP.Enabled
+	case "wiki":
+		return t.Wiki.Enabled
 	default:
 		return true
 	}
