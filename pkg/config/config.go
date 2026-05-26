@@ -47,6 +47,10 @@ type Config struct {
 	Heartbeat HeartbeatConfig `json:"heartbeat"           yaml:"-"`
 	Devices   DevicesConfig   `json:"devices"             yaml:"-"`
 	Voice     VoiceConfig     `json:"voice"               yaml:"-"`
+	// ExpectedTimezone is the IANA timezone name the agent expects at startup
+	// (e.g. "Europe/Rome"). When non-empty, the agent logs a warning if
+	// time.Local does not match. Leave empty to disable the check.
+	ExpectedTimezone string `json:"expected_timezone,omitempty" yaml:"expected_timezone,omitempty"`
 	// BuildInfo contains build-time version information
 	BuildInfo BuildInfo `json:"build_info,omitempty" yaml:"-"`
 
@@ -1042,6 +1046,10 @@ type SchedulerConfig struct {
 	ParseModel      string `json:"parse_model"              yaml:"parse_model"`
 }
 
+type LinkFetchConfig struct {
+	Enabled bool `json:"enabled" yaml:"enabled"`
+}
+
 type ToolsConfig struct {
 	AllowReadPaths  []string `json:"allow_read_paths"  yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_READ_PATHS"`
 	AllowWritePaths []string `json:"allow_write_paths" yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_WRITE_PATHS"`
@@ -1063,6 +1071,7 @@ type ToolsConfig struct {
 	GCal            GCalToolsConfig    `json:"gcal"              yaml:"gcal,omitempty"`
 	GitHub          GitHubConfig       `json:"github"            yaml:"github,omitempty"`
 	Scheduler       SchedulerConfig    `json:"scheduler"         yaml:"scheduler,omitempty"`
+	LinkFetch       LinkFetchConfig    `json:"link_fetch"        yaml:"link_fetch,omitempty"`
 	MediaCleanup    MediaCleanupConfig `json:"media_cleanup"     yaml:"-"`
 	MCP             MCPConfig          `json:"mcp"               yaml:"-"`
 	AppendFile      ToolConfig         `json:"append_file"       yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_APPEND_FILE_"`
@@ -1858,6 +1867,8 @@ func (t *ToolsConfig) IsToolEnabled(name string) bool {
 		return t.GitHub.Enabled
 	case "scheduler":
 		return t.Scheduler.Enabled
+	case "link_fetch":
+		return t.LinkFetch.Enabled
 	default:
 		return true
 	}

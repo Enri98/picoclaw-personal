@@ -33,7 +33,7 @@ var untrustedFetchTools = map[string]bool{
 	// github_watched_repos and github_ci_status are not locked: the former
 	// returns only config-sourced strings, the latter only a status enum and
 	// a ref — no external free-form text.
-	// "link_fetch":            true,  // chunk 11
+	"link_fetch": true,
 }
 
 // writableToolsLockedOnUntrustedFetch is the set of tools that must be stripped

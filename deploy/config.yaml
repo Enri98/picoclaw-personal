@@ -1,6 +1,10 @@
 # PicoClaw deployment configuration — Pi Zero 2 W
 # Paths are absolute on the Pi filesystem.
 
+# Expected IANA timezone name. If set, the agent logs a warning at startup when
+# time.Local does not match. Leave empty to disable the check.
+expected_timezone: "Europe/Rome"
+
 tools:
   wiki:
     dir: /home/picoclaw/wiki
@@ -29,6 +33,8 @@ tools:
     # Repositories the assistant may read from and file inquiry issues against.
     # Must be set before /gh or /claude will work. Format: ["owner/repo", ...]
     watched_repos: []
+  link_fetch:
+    enabled: true
   scheduler:
     enabled: true
     briefing_time: "08:00"

@@ -1,0 +1,11 @@
+[Unit]
+Description=PicoClaw state backup snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/picoclaw-state-backup.sh
+User=root
+StandardOutput=journal
+StandardError=journal

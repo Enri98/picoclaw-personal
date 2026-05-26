@@ -29,6 +29,12 @@ func NewAgentLoop(
 	provider providers.LLMProvider,
 	opts ...AgentLoopOption,
 ) *AgentLoop {
+	if ok, msg := CheckTimezone(cfg.ExpectedTimezone); !ok {
+		logger.WarnCF("agent", msg, nil)
+	} else if msg != "" {
+		logger.InfoCF("agent", msg, nil)
+	}
+
 	registry := NewAgentRegistry(cfg, provider)
 
 	// Set up shared fallback chain with rate limiting.
@@ -210,6 +216,10 @@ func NewAgentLoop(
 					al.githubPoller = poller
 				}
 			}
+		}
+
+		if cfg.Tools.IsToolEnabled("link_fetch") {
+			al.linkFetchToolset = tools.NewLinkFetchToolset()
 		}
 
 		if cfg.Tools.IsToolEnabled("scheduler") {
@@ -578,6 +588,12 @@ func registerSharedTools(
 		if al.remindersToolset != nil {
 			for _, rt := range al.remindersToolset.Tools() {
 				agent.Tools.Register(rt)
+			}
+		}
+
+		if al.linkFetchToolset != nil {
+			for _, lt := range al.linkFetchToolset.Tools() {
+				agent.Tools.Register(lt)
 			}
 		}
 

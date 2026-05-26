@@ -70,6 +70,7 @@ type AgentLoop struct {
 	githubPoller     *GitHubPoller
 	scheduler        *Scheduler
 	remindersToolset *tools.RemindersToolset
+	linkFetchToolset *tools.LinkFetchToolset
 	steering         *steeringQueue
 	pendingSkills    sync.Map
 	pendingStops     sync.Map

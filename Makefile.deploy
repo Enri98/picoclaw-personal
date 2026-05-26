@@ -61,6 +61,58 @@
 #   7. Edit deploy/config.yaml and add: tools.scheduler.briefing_time: "08:00"
 #      Reminders and briefings use existing Gmail/Outlook/GCal/GitHub credentials.
 #
+# ## State Backup Setup (Chunk D — laptop dev)
+# Backs up workspace/state/ (reminders, scheduler state, polls, proposals) and secrets.env
+# (encrypted) to wiki-mirror/state-backup/ for daily snapshots pushed to private GitHub.
+#
+# Prerequisites:
+#   - age tool installed (https://github.com/FiloSottile/age)
+#   - wiki-mirror sibling repo cloned at /home/picoclaw/wiki-mirror on the Pi
+#   - The picoclaw user MUST have push access to the wiki-mirror remote, or
+#     the daily git push will fail silently in the journal. Either:
+#       (a) SSH: register /home/picoclaw/.ssh/id_ed25519.pub as a deploy key
+#           on the wiki-mirror GitHub repo with write access, and confirm
+#           the remote is SSH (`git remote -v` shows git@github.com:...)
+#       (b) HTTPS: a fine-grained PAT cached via git-credential-store
+#     Verify before enabling the timer: sudo -u picoclaw git -C /home/picoclaw/wiki-mirror push --dry-run
+#
+# Laptop-side setup (one-time):
+#   1. Generate age keypair on your laptop (do NOT generate on the Pi):
+#      age-keygen -o ~/picoclaw-restore.key
+#      This creates both the private and public key. Store the private key securely
+#      (password manager, offline media). Losing it means encrypted secrets.env is unrecoverable.
+#
+#   2. Extract the public key (the line starting "# public key:") and copy to the Pi:
+#      cat ~/picoclaw-restore.key | grep "^# public key:" | sed 's/# public key: //' > /tmp/age-recipient.pub
+#      scp /tmp/age-recipient.pub picoclaw@pi-assistant:/tmp/
+#      ssh picoclaw@pi-assistant 'sudo install -m 0644 -o root -g root /tmp/age-recipient.pub /etc/picoclaw/age-recipient.pub'
+#
+# Pi-side setup (SSH into the Pi as your user, then sudo):
+#   3. Adjust secrets.env to be group-readable by picoclaw:
+#      sudo chgrp picoclaw /etc/picoclaw/secrets.env
+#      sudo chmod 0640 /etc/picoclaw/secrets.env
+#
+#   4. Deploy backup script and systemd units:
+#      sudo install -m 0755 -o root -g root deploy/state-backup.sh /usr/local/bin/picoclaw-state-backup.sh
+#      sudo install -m 0644 -o root -g root deploy/picoclaw-state-backup.service /etc/systemd/system/
+#      sudo install -m 0644 -o root -g root deploy/picoclaw-state-backup.timer /etc/systemd/system/
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable --now picoclaw-state-backup.timer
+#
+#   5. Verify setup:
+#      systemctl list-timers picoclaw-state-backup.timer
+#      sudo systemctl start picoclaw-state-backup.service  # one-shot test run
+#      journalctl -u picoclaw-state-backup.service -n 30
+#      ls -la /home/picoclaw/wiki-mirror/state-backup/
+#
+# Restore (laptop-side, if needed):
+#   - Decrypt secrets:
+#     age --decrypt --identity ~/picoclaw-restore.key \
+#         --output secrets.env wiki-mirror/state-backup/secrets.env.age
+#   - Extract state snapshot:
+#     mkdir -p /tmp/restore
+#     tar -xzf wiki-mirror/state-backup/state-YYYY-MM-DD.tar.gz -C /tmp/restore
+#
 # Standalone PowerShell build commands (no make required):
 #   # 1. Generate the embedded workspace using the HOST arch (no GOOS/GOARCH set):
 #   Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
