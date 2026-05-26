@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -121,6 +122,60 @@ func (al *AgentLoop) handleCommand(
 				return "Usage: /reject <proposal-id>", true
 			}
 			return al.rejectProposal(parts[1]), true
+		case "gh":
+			if al.githubToolset == nil {
+				return "GitHub integration not configured.", true
+			}
+			opts.ForcedSkills = append(opts.ForcedSkills, "github-monitor")
+			rewritten := "Summarize the current state across all my watched GitHub repositories. " +
+				"Start by calling github_watched_repos. Then for each repo, call github_open_issues, " +
+				"github_open_prs, and (if there are recent pushes) github_ci_status on the default branch. " +
+				"Group the output by repository. Be concise. Respond in the user's language."
+			opts.Dispatch.UserMessage = rewritten
+			opts.UserMessage = rewritten
+			return "", false
+		case "claude":
+			if al.githubToolset == nil {
+				return "GitHub integration not configured.", true
+			}
+			if al.githubPoller == nil {
+				return "GitHub response poller not running.", true
+			}
+			repo, question, perr := parseClaudeCommand(msg.Content)
+			if perr != "" {
+				return perr, true
+			}
+			fullRepo, err := al.githubToolset.ResolveRepo(repo)
+			if err != nil {
+				return fmt.Sprintf("Unknown repo %q: %s", repo, err.Error()), true
+			}
+			owner, name, ok := splitOwnerRepo(fullRepo)
+			if !ok {
+				return fmt.Sprintf("Malformed repo %q (expected owner/repo).", fullRepo), true
+			}
+			title := truncateForTitle(question, 80)
+			body := fmt.Sprintf("@claude\n\n%s\n\n---\nInquiry forwarded from PicoBot.", question)
+			issueNum, issueURL, err := al.githubToolset.CreateIssue(ctx, fullRepo, title, body)
+			if err != nil {
+				return fmt.Sprintf("Failed to create issue: %s", err.Error()), true
+			}
+			watchID, regErr := newWatchID()
+			if regErr != nil {
+				logger.WarnCF("agent", "failed to mint watch ID; using fallback", map[string]any{"error": regErr.Error()})
+				watchID = fmt.Sprintf("watch-%d", time.Now().UnixNano())
+			}
+			if err := al.githubPoller.Register(PollEntry{
+				ID:          watchID,
+				Owner:       owner,
+				Repo:        name,
+				IssueNumber: issueNum,
+				CreatedAt:   time.Now().UTC(),
+				TTL:         24 * time.Hour,
+				ChatID:      msg.ChatID,
+			}); err != nil {
+				return fmt.Sprintf("Issue #%d created at %s but failed to register watch: %s", issueNum, issueURL, err.Error()), true
+			}
+			return fmt.Sprintf("Created issue #%d: %s\nWatching for a response (24h timeout).", issueNum, issueURL), true
 		case "sh":
 			if al.bashTool == nil {
 				return "Bash tool not configured.", true
@@ -229,15 +284,34 @@ func (al *AgentLoop) applyProposal(ctx context.Context, id string) string {
 			return fmt.Sprintf("Created event: %s at %s", ev.Title, ev.Start.Format(time.RFC1123))
 		}
 		if isProposalNotFound(err) {
-			// fall through to final message
+			// fall through
 		} else if isStoreLoadError(err) {
-			logger.WarnCF("agent", "gcal proposal store error during /apply", map[string]any{"error": err.Error()})
+			logger.WarnCF("agent", "gcal proposal store error during /apply; trying next store", map[string]any{"error": err.Error()})
 			lastNonFatal = err.Error()
 		} else {
 			return fmt.Sprintf("Apply failed: %s", err.Error())
 		}
 	}
-	if al.wikiToolset == nil && al.bashTool == nil && al.gcalToolset == nil {
+	if al.githubToolset != nil {
+		if al.circuitBreaker != nil {
+			if ok, reason := al.circuitBreaker.CheckTool(); !ok {
+				return fmt.Sprintf("Blocked: %s", reason)
+			}
+		}
+		issueNum, issueURL, err := al.githubToolset.Proposals().Apply(ctx, id)
+		if err == nil {
+			return fmt.Sprintf("Created issue #%d: %s", issueNum, issueURL)
+		}
+		if isProposalNotFound(err) {
+			// fall through to final message
+		} else if isStoreLoadError(err) {
+			logger.WarnCF("agent", "github proposal store error during /apply", map[string]any{"error": err.Error()})
+			lastNonFatal = err.Error()
+		} else {
+			return fmt.Sprintf("Apply failed: %s", err.Error())
+		}
+	}
+	if al.wikiToolset == nil && al.bashTool == nil && al.gcalToolset == nil && al.githubToolset == nil {
 		return "No proposal stores configured."
 	}
 	if lastNonFatal != "" {
@@ -294,15 +368,79 @@ func (al *AgentLoop) rejectProposal(id string) string {
 		if err := al.gcalToolset.Proposals().Reject(id); err == nil {
 			return fmt.Sprintf("Rejected proposal %s.", id)
 		} else if isStoreLoadError(err) {
-			logger.WarnCF("agent", "gcal proposal store error during /reject", map[string]any{"error": err.Error()})
+			logger.WarnCF("agent", "gcal proposal store error during /reject; trying next store", map[string]any{"error": err.Error()})
 		} else if !isProposalNotFound(err) {
 			return fmt.Sprintf("Reject failed: %s", err.Error())
 		}
 	}
-	if al.wikiToolset == nil && al.bashTool == nil && al.gcalToolset == nil {
+	if al.githubToolset != nil {
+		if err := al.githubToolset.Proposals().Reject(id); err == nil {
+			return fmt.Sprintf("Rejected proposal %s.", id)
+		} else if isStoreLoadError(err) {
+			logger.WarnCF("agent", "github proposal store error during /reject", map[string]any{"error": err.Error()})
+		} else if !isProposalNotFound(err) {
+			return fmt.Sprintf("Reject failed: %s", err.Error())
+		}
+	}
+	if al.wikiToolset == nil && al.bashTool == nil && al.gcalToolset == nil && al.githubToolset == nil {
 		return "No proposal stores configured."
 	}
 	return fmt.Sprintf("No active proposal with ID %s", id)
+}
+
+// parseClaudeCommand parses `/claude <repo> <question>` (the question may be
+// wrapped in matching quotes). Returns the repo token, the question, or a
+// user-facing error string. An empty error string means the parse succeeded.
+func parseClaudeCommand(raw string) (repo string, question string, errMsg string) {
+	parts := strings.Fields(strings.TrimSpace(raw))
+	if len(parts) < 3 {
+		return "", "", `Usage: /claude <repo> "question"`
+	}
+	repo = parts[1]
+	rest := strings.TrimSpace(strings.Join(parts[2:], " "))
+	if len(rest) >= 2 {
+		first, last := rest[0], rest[len(rest)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			rest = strings.TrimSpace(rest[1 : len(rest)-1])
+		}
+	}
+	if rest == "" {
+		return "", "", `Usage: /claude <repo> "question"`
+	}
+	return repo, rest, ""
+}
+
+// splitOwnerRepo splits "owner/repo" into its two components.
+func splitOwnerRepo(full string) (owner string, name string, ok bool) {
+	parts := strings.SplitN(full, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+// truncateForTitle clips the input to maxLen runes for use as an issue title.
+// If clipped, an ellipsis is appended.
+func truncateForTitle(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	if maxLen <= 1 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-1]) + "…"
+}
+
+// newWatchID mints a UUID v4 string used as a poll-entry identifier.
+func newWatchID() (string, error) {
+	var b [16]byte
+	if _, err := cryptorand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
 func formatRunResultForUser(r tools.RunResult) string {

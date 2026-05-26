@@ -11,9 +11,20 @@
 #   - Go 1.25+ in PATH
 #   - SSH access to PI_HOST (key-based recommended)
 #   - rsync available (Git Bash ships it; or use WSL)
+#   - GitHub PAT (see section below)
 #
 # PI_HOST must resolve — use Tailscale hostname or bare IP.
 # On Windows, run this Makefile from Git Bash (not PowerShell directly).
+#
+# ## GitHub PAT
+# The deployment requires a fine-grained Personal Access Token (PAT) for GitHub integration.
+# Scope required:
+#   - Read-only: Contents, Issues, Pull requests, Commit statuses, Metadata
+#   - Write: Issues only (required for the `/claude <repo>` flow to create inquiry issues)
+#   - Limit scope to repositories listed in `watched_repos` in `deploy/config.yaml`
+# To mint: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+# Add to the Pi: Insert `GITHUB_PAT=ghp_xxxxx` into `secrets.env`
+# Recommended expiration: 90 days; renew manually when approaching expiry
 #
 # Standalone PowerShell build commands (no make required):
 #   # 1. Generate the embedded workspace using the HOST arch (no GOOS/GOARCH set):

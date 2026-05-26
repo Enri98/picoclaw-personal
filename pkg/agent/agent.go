@@ -66,6 +66,8 @@ type AgentLoop struct {
 	gmailToolset   *tools.GmailToolset
 	outlookToolset *tools.OutlookToolset
 	gcalToolset    *tools.GCalToolset
+	githubToolset  *tools.GitHubToolset
+	githubPoller   *GitHubPoller
 	steering       *steeringQueue
 	pendingSkills  sync.Map
 	pendingStops   sync.Map
@@ -152,6 +154,10 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 	}
 	if err := al.ensureMCPInitialized(ctx); err != nil {
 		return err
+	}
+
+	if al.githubPoller != nil {
+		al.githubPoller.Start(ctx)
 	}
 
 	idleTicker := time.NewTicker(100 * time.Millisecond)

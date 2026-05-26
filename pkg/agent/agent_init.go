@@ -190,6 +190,27 @@ func NewAgentLoop(
 				al.gcalToolset = ts
 			}
 		}
+
+		if cfg.Tools.IsToolEnabled("github") {
+			patEnv := cfg.Tools.GitHub.PATEnv
+			if patEnv == "" {
+				patEnv = "GITHUB_PAT"
+			}
+			pat := os.Getenv(patEnv)
+			if pat == "" {
+				logger.WarnCF("agent", "GitHub tool enabled but "+patEnv+" env var missing; skipping", nil)
+			} else if ts, err := tools.NewGitHubToolset(pat, cfg.Tools.GitHub.WatchedRepos, filepath.Join(defaultAgent.Workspace, "state")); err != nil {
+				logger.WarnCF("agent", "Failed to construct GitHub toolset", map[string]any{"error": err.Error()})
+			} else {
+				al.githubToolset = ts
+				stateDir := filepath.Join(defaultAgent.Workspace, "state")
+				if poller, pollerErr := NewGitHubPoller(pat, nil, stateDir); pollerErr != nil {
+					logger.WarnCF("agent", "Failed to construct GitHub poller", map[string]any{"error": pollerErr.Error()})
+				} else {
+					al.githubPoller = poller
+				}
+			}
+		}
 	}
 	al.contextManager = al.resolveContextManager()
 
@@ -489,6 +510,12 @@ func registerSharedTools(
 
 		if al.gcalToolset != nil {
 			for _, gt := range al.gcalToolset.Tools() {
+				agent.Tools.Register(gt)
+			}
+		}
+
+		if al.githubToolset != nil {
+			for _, gt := range al.githubToolset.Tools() {
 				agent.Tools.Register(gt)
 			}
 		}

@@ -1026,6 +1026,12 @@ type GCalToolsConfig struct {
 	CalendarID string `json:"calendar_id" yaml:"calendar_id"`
 }
 
+type GitHubConfig struct {
+	Enabled      bool     `json:"enabled" yaml:"enabled"`
+	PATEnv       string   `json:"pat_env" yaml:"pat_env"`
+	WatchedRepos []string `json:"watched_repos" yaml:"watched_repos,omitempty"`
+}
+
 type ToolsConfig struct {
 	AllowReadPaths  []string `json:"allow_read_paths"  yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_READ_PATHS"`
 	AllowWritePaths []string `json:"allow_write_paths" yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_WRITE_PATHS"`
@@ -1045,6 +1051,7 @@ type ToolsConfig struct {
 	Gmail           GmailToolsConfig   `json:"gmail"             yaml:"gmail,omitempty"`
 	Outlook         OutlookToolsConfig `json:"outlook"           yaml:"outlook,omitempty"`
 	GCal            GCalToolsConfig    `json:"gcal"              yaml:"gcal,omitempty"`
+	GitHub          GitHubConfig       `json:"github"            yaml:"github,omitempty"`
 	MediaCleanup    MediaCleanupConfig `json:"media_cleanup"     yaml:"-"`
 	MCP             MCPConfig          `json:"mcp"               yaml:"-"`
 	AppendFile      ToolConfig         `json:"append_file"       yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_APPEND_FILE_"`
@@ -1836,6 +1843,8 @@ func (t *ToolsConfig) IsToolEnabled(name string) bool {
 		return t.Outlook.Enabled
 	case "gcal":
 		return t.GCal.Enabled
+	case "github":
+		return t.GitHub.Enabled
 	default:
 		return true
 	}

@@ -20,23 +20,29 @@ import (
 // Calendar list tools follow the same logic: anyone able to send a calendar
 // invite controls the event title/description that lands in LLM context.
 var untrustedFetchTools = map[string]bool{
-	"gmail_list_unread":   true,
-	"gmail_get_body":      true,
-	"outlook_list_unread": true,
-	"outlook_get_body":    true,
-	"gcal_today":          true,
-	"gcal_week":           true,
-	// "github_get_issue_body": true,  // chunk 10
+	"gmail_list_unread":     true,
+	"gmail_get_body":        true,
+	"outlook_list_unread":   true,
+	"outlook_get_body":      true,
+	"gcal_today":            true,
+	"gcal_week":             true,
+	"github_open_issues":    true,
+	"github_open_prs":       true,
+	"github_recent_commits": true,
+	"github_get_issue_body": true,
+	// github_watched_repos and github_ci_status are not locked: the former
+	// returns only config-sourced strings, the latter only a status enum and
+	// a ref — no external free-form text.
 	// "link_fetch":            true,  // chunk 11
 }
 
 // writableToolsLockedOnUntrustedFetch is the set of tools that must be stripped
 // from the LLM's tool list once a turn has been locked by an untrusted fetch.
 var writableToolsLockedOnUntrustedFetch = map[string]bool{
-	"bash":               true,
-	"wiki_propose_write": true,
-	"gcal_create_event_proposal": true,
-	// "github_create_issue_proposal":  true,  // chunk 10
+	"bash":                         true,
+	"wiki_propose_write":           true,
+	"gcal_create_event_proposal":   true,
+	"github_create_issue_proposal": true,
 }
 
 // TurnLock tracks which turns have fetched untrusted content and therefore must

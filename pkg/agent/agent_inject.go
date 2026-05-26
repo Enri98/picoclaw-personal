@@ -21,6 +21,9 @@ func (al *AgentLoop) RegisterTool(tool tools.Tool) {
 
 func (al *AgentLoop) SetChannelManager(cm *channels.Manager) {
 	al.channelManager = cm
+	if al.githubPoller != nil {
+		al.githubPoller.SetChannelManager(cm)
+	}
 }
 
 func (al *AgentLoop) GetRegistry() *AgentRegistry {
