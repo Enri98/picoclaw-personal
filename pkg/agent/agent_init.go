@@ -211,6 +211,61 @@ func NewAgentLoop(
 				}
 			}
 		}
+
+		if cfg.Tools.IsToolEnabled("scheduler") {
+			schedStateDir := filepath.Join(defaultAgent.Workspace, "state")
+			heartbeatPath := cfg.Tools.Scheduler.HeartbeatPath
+			if heartbeatPath == "" {
+				heartbeatPath = filepath.Join(schedStateDir, "heartbeat")
+			} else if !filepath.IsAbs(heartbeatPath) {
+				// Config-supplied relative paths (e.g. "state/heartbeat") resolve
+				// against the workspace root, not the process CWD — the briefing's
+				// os.Stat must see the same file the tick goroutine writes,
+				// regardless of where the binary is started from.
+				heartbeatPath = filepath.Join(defaultAgent.Workspace, heartbeatPath)
+			}
+
+			rs, rsErr := NewReminderStore(schedStateDir)
+			if rsErr != nil {
+				logger.WarnCF("agent", "Failed to construct reminder store; skipping scheduler",
+					map[string]any{"error": rsErr.Error()})
+			} else {
+				briefing := NewBriefingAssembler(
+					al.gcalToolset,
+					al.gmailToolset,
+					al.outlookToolset,
+					al.githubToolset,
+					al.wikiToolset,
+					heartbeatPath,
+				)
+
+				tick := time.Duration(cfg.Tools.Scheduler.ReminderTickSec) * time.Second
+
+				sched, schedErr := NewScheduler(SchedulerOptions{
+					StateDir:          schedStateDir,
+					BriefingTime:      cfg.Tools.Scheduler.BriefingTime,
+					ReminderTick:      tick,
+					HeartbeatPath:     heartbeatPath,
+					ReminderStore:     rs,
+					BriefingAssembler: briefing,
+					Provider:          provider,
+					Model:             cfg.Tools.Scheduler.ParseModel,
+				})
+				if schedErr != nil {
+					logger.WarnCF("agent", "Failed to construct scheduler",
+						map[string]any{"error": schedErr.Error()})
+				} else {
+					al.scheduler = sched
+
+					adapter := &reminderStoreAdapter{store: rs}
+					al.remindersToolset = tools.NewRemindersToolset(adapter)
+					primaryChatID := cfg.Tools.Scheduler.PrimaryChatID
+					if primaryChatID != "" {
+						al.remindersToolset.SetChatID(primaryChatID)
+					}
+				}
+			}
+		}
 	}
 	al.contextManager = al.resolveContextManager()
 
@@ -517,6 +572,12 @@ func registerSharedTools(
 		if al.githubToolset != nil {
 			for _, gt := range al.githubToolset.Tools() {
 				agent.Tools.Register(gt)
+			}
+		}
+
+		if al.remindersToolset != nil {
+			for _, rt := range al.remindersToolset.Tools() {
+				agent.Tools.Register(rt)
 			}
 		}
 

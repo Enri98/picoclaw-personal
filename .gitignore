@@ -20,6 +20,10 @@ config.json
 sessions/
 build/
 
+# Runtime state — reminders, heartbeat, proposal stores, OAuth tokens.
+# Never commit; per-deployment user data.
+state/
+
 # Coverage
 
 # Secrets & Config (keep templates, ignore actual secrets)

@@ -44,6 +44,26 @@ func (ws *WikiToolset) Tools() []Tool {
 	}
 }
 
+// InboxCountDirect returns the number of non-blank lines in inbox.md that
+// start with "- " (bullet entries). Used by the briefing assembler.
+func (ws *WikiToolset) InboxCountDirect() (int, error) {
+	inboxPath := filepath.Join(ws.wikiDir, "inbox.md")
+	data, err := os.ReadFile(inboxPath)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("wiki: inbox count: %w", err)
+	}
+	count := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "- ") {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // canonicalize resolves path relative to wikiDir and rejects traversal.
 // Returns the cleaned absolute path, or an error if traversal is detected.
 func (ws *WikiToolset) canonicalize(raw string) (string, error) {

@@ -1,0 +1,14 @@
+[Unit]
+Description=PicoClaw failure alert sender
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/picoclaw-alert.sh %i %H
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

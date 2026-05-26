@@ -1032,6 +1032,16 @@ type GitHubConfig struct {
 	WatchedRepos []string `json:"watched_repos" yaml:"watched_repos,omitempty"`
 }
 
+type SchedulerConfig struct {
+	Enabled         bool   `json:"enabled"                  yaml:"enabled"`
+	BriefingTime    string `json:"briefing_time"            yaml:"briefing_time"`
+	ReminderTickSec int    `json:"reminder_tick_seconds"    yaml:"reminder_tick_seconds"`
+	HeartbeatPath   string `json:"heartbeat_path"           yaml:"heartbeat_path"`
+	PrimaryChatID   string `json:"primary_chat_id"          yaml:"primary_chat_id"`
+	AlertChatID     string `json:"alert_chat_id"            yaml:"alert_chat_id"`
+	ParseModel      string `json:"parse_model"              yaml:"parse_model"`
+}
+
 type ToolsConfig struct {
 	AllowReadPaths  []string `json:"allow_read_paths"  yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_READ_PATHS"`
 	AllowWritePaths []string `json:"allow_write_paths" yaml:"-" env:"PICOCLAW_TOOLS_ALLOW_WRITE_PATHS"`
@@ -1052,6 +1062,7 @@ type ToolsConfig struct {
 	Outlook         OutlookToolsConfig `json:"outlook"           yaml:"outlook,omitempty"`
 	GCal            GCalToolsConfig    `json:"gcal"              yaml:"gcal,omitempty"`
 	GitHub          GitHubConfig       `json:"github"            yaml:"github,omitempty"`
+	Scheduler       SchedulerConfig    `json:"scheduler"         yaml:"scheduler,omitempty"`
 	MediaCleanup    MediaCleanupConfig `json:"media_cleanup"     yaml:"-"`
 	MCP             MCPConfig          `json:"mcp"               yaml:"-"`
 	AppendFile      ToolConfig         `json:"append_file"       yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_APPEND_FILE_"`
@@ -1845,6 +1856,8 @@ func (t *ToolsConfig) IsToolEnabled(name string) bool {
 		return t.GCal.Enabled
 	case "github":
 		return t.GitHub.Enabled
+	case "scheduler":
+		return t.Scheduler.Enabled
 	default:
 		return true
 	}

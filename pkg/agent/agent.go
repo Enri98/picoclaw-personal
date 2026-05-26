@@ -48,30 +48,32 @@ type AgentLoop struct {
 	hooks              *HookManager
 
 	// Runtime state
-	running        atomic.Bool
-	contextManager ContextManager
-	fallback       *providers.FallbackChain
-	channelManager interfaces.ChannelManager
-	mediaStore     media.MediaStore
-	transcriber    asr.Transcriber
-	cmdRegistry    *commands.Registry
-	mcp            mcpRuntime
-	evolution      *evolutionBridge
-	hookRuntime    hookRuntime
-	circuitBreaker *CircuitBreaker
-	usageHook      *UsageHook
-	turnLock       *TurnLock
-	wikiToolset    *tools.WikiToolset
-	bashTool       *tools.BashTool
-	gmailToolset   *tools.GmailToolset
-	outlookToolset *tools.OutlookToolset
-	gcalToolset    *tools.GCalToolset
-	githubToolset  *tools.GitHubToolset
-	githubPoller   *GitHubPoller
-	steering       *steeringQueue
-	pendingSkills  sync.Map
-	pendingStops   sync.Map
-	mu             sync.RWMutex
+	running          atomic.Bool
+	contextManager   ContextManager
+	fallback         *providers.FallbackChain
+	channelManager   interfaces.ChannelManager
+	mediaStore       media.MediaStore
+	transcriber      asr.Transcriber
+	cmdRegistry      *commands.Registry
+	mcp              mcpRuntime
+	evolution        *evolutionBridge
+	hookRuntime      hookRuntime
+	circuitBreaker   *CircuitBreaker
+	usageHook        *UsageHook
+	turnLock         *TurnLock
+	wikiToolset      *tools.WikiToolset
+	bashTool         *tools.BashTool
+	gmailToolset     *tools.GmailToolset
+	outlookToolset   *tools.OutlookToolset
+	gcalToolset      *tools.GCalToolset
+	githubToolset    *tools.GitHubToolset
+	githubPoller     *GitHubPoller
+	scheduler        *Scheduler
+	remindersToolset *tools.RemindersToolset
+	steering         *steeringQueue
+	pendingSkills    sync.Map
+	pendingStops     sync.Map
+	mu               sync.RWMutex
 
 	// workerSem limits concurrent turn processing workers.
 	workerSem chan struct{}
@@ -158,6 +160,10 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 
 	if al.githubPoller != nil {
 		al.githubPoller.Start(ctx)
+	}
+
+	if al.scheduler != nil {
+		al.scheduler.Start(ctx)
 	}
 
 	idleTicker := time.NewTicker(100 * time.Millisecond)

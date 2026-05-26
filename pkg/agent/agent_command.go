@@ -122,6 +122,55 @@ func (al *AgentLoop) handleCommand(
 				return "Usage: /reject <proposal-id>", true
 			}
 			return al.rejectProposal(parts[1]), true
+		case "remind":
+			if al.scheduler == nil || al.scheduler.Reminders() == nil {
+				return "Reminders not configured.", true
+			}
+			parts := strings.Fields(strings.TrimSpace(msg.Content))
+			if len(parts) < 3 {
+				return "Usage: /remind <when> <text>  (e.g. /remind 5m feed cat, /remind tomorrow 9:00 call mom)", true
+			}
+			now := time.Now()
+			var fireAt time.Time
+			var textTokens []string
+			parsed := false
+			parser := al.scheduler.TimeParser()
+			if parser == nil {
+				return "Reminder time parser not configured.", true
+			}
+			// Try increasingly short time-token prefixes (3 → 1) and use the
+			// first that parses. Three tokens covers phrases like "in 30 minutes"
+			// and "tra 2 ore"; two covers "tomorrow 9:00"; one covers "5m" / "14:32".
+			for n := 3; n >= 1; n-- {
+				if 1+n >= len(parts) {
+					continue
+				}
+				whenStr := strings.Join(parts[1:1+n], " ")
+				t, err := parser.Parse(ctx, now, whenStr)
+				if err == nil {
+					fireAt = t
+					textTokens = parts[1+n:]
+					parsed = true
+					break
+				}
+			}
+			if !parsed {
+				return "Could not parse the time. Try: 5m, 1h30m, 14:32, tomorrow 9:00, in 30 minutes, tra 2 ore.", true
+			}
+			text := strings.TrimSpace(strings.Join(textTokens, " "))
+			if text == "" {
+				return "Usage: /remind <when> <text>  — the reminder text is required.", true
+			}
+			stored, err := al.scheduler.Reminders().Register(Reminder{
+				Text:   text,
+				FireAt: fireAt,
+				ChatID: msg.ChatID,
+			})
+			if err != nil {
+				return fmt.Sprintf("Failed to register reminder: %s", err.Error()), true
+			}
+			return fmt.Sprintf("Reminder set for %s (id: %s): %s",
+				fireAt.Local().Format("Mon 02 Jan 15:04 MST"), stored.ID, text), true
 		case "gh":
 			if al.githubToolset == nil {
 				return "GitHub integration not configured.", true

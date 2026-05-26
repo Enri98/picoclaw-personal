@@ -103,6 +103,56 @@ func (ts *GitHubToolset) Proposals() *GitHubProposalStore {
 	return ts.proposals
 }
 
+// WatchedRepos returns the list of configured watched repositories.
+func (ts *GitHubToolset) WatchedRepos() []string {
+	return ts.watchedRepos
+}
+
+// OpenIssuesDirect returns the count of open issues for a repo (owner/repo form).
+// Bypasses tool wrapper. Used by the briefing assembler.
+func (ts *GitHubToolset) OpenIssuesDirect(ctx context.Context, repo string) (int, error) {
+	body, status, err := ts.apiGet(ctx, "/repos/"+repo+"/issues?state=open&per_page=100&pulls=false")
+	if err != nil {
+		return 0, fmt.Errorf("github: open_issues_direct %s: %w", repo, err)
+	}
+	if status != http.StatusOK {
+		return 0, fmt.Errorf("github: open_issues_direct %s: API returned %d", repo, status)
+	}
+	var raw []struct {
+		Number      int       `json:"number"`
+		PullRequest *struct{} `json:"pull_request,omitempty"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return 0, fmt.Errorf("github: open_issues_direct %s: parse: %w", repo, err)
+	}
+	count := 0
+	for _, r := range raw {
+		if r.PullRequest == nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// OpenPRsDirect returns the count of open pull requests for a repo (owner/repo form).
+// Bypasses tool wrapper. Used by the briefing assembler.
+func (ts *GitHubToolset) OpenPRsDirect(ctx context.Context, repo string) (int, error) {
+	body, status, err := ts.apiGet(ctx, "/repos/"+repo+"/pulls?state=open&per_page=100")
+	if err != nil {
+		return 0, fmt.Errorf("github: open_prs_direct %s: %w", repo, err)
+	}
+	if status != http.StatusOK {
+		return 0, fmt.Errorf("github: open_prs_direct %s: API returned %d", repo, status)
+	}
+	var raw []struct {
+		Number int `json:"number"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return 0, fmt.Errorf("github: open_prs_direct %s: parse: %w", repo, err)
+	}
+	return len(raw), nil
+}
+
 // resolveRepo accepts "owner/repo" (full form) or "repo" (short form).
 // Short form is matched against the watched list: exactly one match required.
 // Returns an error if the resolved repo is not in the watched list.

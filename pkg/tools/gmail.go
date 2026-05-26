@@ -80,6 +80,17 @@ func (ts *GmailToolset) Tools() []Tool {
 	}
 }
 
+// AccountNames returns the list of configured account names.
+func (ts *GmailToolset) AccountNames() []string {
+	return ts.accountNames()
+}
+
+// ListUnreadDirect fetches unread messages for the given account since the
+// provided time, bypassing the tool wrapper. Used by the briefing assembler.
+func (ts *GmailToolset) ListUnreadDirect(ctx context.Context, account string, since time.Time, max int) ([]GmailMessage, error) {
+	return ts.client.ListUnread(ctx, account, since, max)
+}
+
 // accountNames returns the sorted list of known account names for use in
 // error messages and parameter enums.
 func (ts *GmailToolset) accountNames() []string {

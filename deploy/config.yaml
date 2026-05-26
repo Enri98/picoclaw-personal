@@ -29,3 +29,13 @@ tools:
     # Repositories the assistant may read from and file inquiry issues against.
     # Must be set before /gh or /claude will work. Format: ["owner/repo", ...]
     watched_repos: []
+  scheduler:
+    enabled: true
+    briefing_time: "08:00"
+    reminder_tick_seconds: 60
+    heartbeat_path: "state/heartbeat"
+    # primary_chat_id / alert_chat_id: leave empty initially; set to the
+    # Telegram chat ID of the primary user once known.
+    primary_chat_id: ""
+    alert_chat_id: ""
+    parse_model: ""   # leave empty to disable LLM time-parsing fallback

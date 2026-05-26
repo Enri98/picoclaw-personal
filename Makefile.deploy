@@ -26,6 +26,41 @@
 # Add to the Pi: Insert `GITHUB_PAT=ghp_xxxxx` into `secrets.env`
 # Recommended expiration: 90 days; renew manually when approaching expiry
 #
+# ## Failure Alert Bot + Scheduler (Chunk 11)
+# The failure alert bot notifies you when the main bot crashes, and the scheduler enables
+# regular briefings (e.g., daily briefing at 08:00). Both require one-time setup.
+#
+# Alert Bot Token:
+#   1. Create a separate Telegram bot via @BotFather (suggested name: "PicoClaw Alerts")
+#   2. Get the bot token and your Telegram user ID (same as allowed_users in config.yaml)
+#   3. SSH to the Pi as root and create /etc/picoclaw/:
+#      sudo mkdir -p /etc/picoclaw
+#      echo "TOKEN_HERE" | sudo tee /etc/picoclaw/telegram-alert-token > /dev/null
+#      sudo chmod 600 /etc/picoclaw/telegram-alert-token
+#      echo "CHAT_ID_HERE" | sudo tee /etc/picoclaw/telegram-alert-chatid > /dev/null
+#      sudo chmod 600 /etc/picoclaw/telegram-alert-chatid
+#
+# Alert Script & Service:
+#   4. sudo cp deploy/on-failure.sh /usr/local/bin/picoclaw-alert.sh
+#      sudo chmod 755 /usr/local/bin/picoclaw-alert.sh
+#      sudo cp deploy/picoclaw-alert.service /etc/systemd/system/
+#      sudo chmod 644 /etc/systemd/system/picoclaw-alert.service
+#      sudo systemctl daemon-reload
+#
+# Wire OnFailure Directive:
+#   5. Edit /etc/systemd/system/picoclaw.service (the main bot unit)
+#      Add "OnFailure=picoclaw-alert.service" under [Unit] section, then:
+#      sudo systemctl daemon-reload
+#
+# Verify Alert Setup:
+#   6. sudo systemctl stop picoclaw (expect Telegram alert within ~5 seconds)
+#      sudo systemctl start picoclaw
+#      sudo journalctl -u picoclaw-alert.service -n 20
+#
+# Scheduler Config (optional, no external setup):
+#   7. Edit deploy/config.yaml and add: tools.scheduler.briefing_time: "08:00"
+#      Reminders and briefings use existing Gmail/Outlook/GCal/GitHub credentials.
+#
 # Standalone PowerShell build commands (no make required):
 #   # 1. Generate the embedded workspace using the HOST arch (no GOOS/GOARCH set):
 #   Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue

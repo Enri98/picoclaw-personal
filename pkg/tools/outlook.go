@@ -61,6 +61,12 @@ func (ts *OutlookToolset) Tools() []Tool {
 	}
 }
 
+// ListUnreadDirect fetches unread Outlook messages since the provided time,
+// bypassing the tool wrapper. Used by the briefing assembler.
+func (ts *OutlookToolset) ListUnreadDirect(ctx context.Context, since time.Time, max int) ([]OutlookMessage, error) {
+	return ts.client.ListUnread(ctx, since, max)
+}
+
 // ---------------------------------------------------------------------------
 // outlook_list_unread
 // ---------------------------------------------------------------------------

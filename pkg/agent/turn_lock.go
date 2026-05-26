@@ -43,6 +43,11 @@ var writableToolsLockedOnUntrustedFetch = map[string]bool{
 	"wiki_propose_write":           true,
 	"gcal_create_event_proposal":   true,
 	"github_create_issue_proposal": true,
+	// reminder_set is locked because an untrusted email/PR body could instruct
+	// the model to plant a delayed notification at an arbitrary future time.
+	// Delivery is to the user's own chat (low blast radius) but the high-trust
+	// channel makes it worth gating.
+	"reminder_set": true,
 }
 
 // TurnLock tracks which turns have fetched untrusted content and therefore must

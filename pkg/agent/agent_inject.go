@@ -6,6 +6,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/audio/asr"
 	"github.com/sipeed/picoclaw/pkg/channels"
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/media"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
@@ -23,6 +24,26 @@ func (al *AgentLoop) SetChannelManager(cm *channels.Manager) {
 	al.channelManager = cm
 	if al.githubPoller != nil {
 		al.githubPoller.SetChannelManager(cm)
+	}
+	if al.scheduler != nil {
+		al.scheduler.SetChannelManager(cm)
+
+		cfg := al.GetConfig()
+		primaryChatID := cfg.Tools.Scheduler.PrimaryChatID
+		alertChatID := cfg.Tools.Scheduler.AlertChatID
+		if alertChatID == "" {
+			alertChatID = primaryChatID
+		}
+
+		if primaryChatID == "" {
+			logger.WarnCF("scheduler", "primary_chat_id is empty; briefings and reminders will not be delivered until a chat ID is configured", nil)
+		} else {
+			al.scheduler.SetChatID(primaryChatID)
+			al.scheduler.SetAlertChatID(alertChatID)
+			if al.remindersToolset != nil {
+				al.remindersToolset.SetChatID(primaryChatID)
+			}
+		}
 	}
 }
 
