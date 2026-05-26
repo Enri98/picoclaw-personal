@@ -53,7 +53,7 @@ var (
 
 	// "in X minutes / hours / days" — English and Italian
 	reInMinutes = regexp.MustCompile(`(?i)^\s*(?:in|tra)\s+(\d+)\s*min(?:uti?|utes?)?\s*$`)
-	reInHours   = regexp.MustCompile(`(?i)^\s*(?:in|tra)\s+(\d+)\s*h(?:r|ours?|ore)?\s*$`)
+	reInHours   = regexp.MustCompile(`(?i)^\s*(?:in|tra)\s+(\d+)\s*(?:h(?:r|ours?)?|ora|ore)\s*$`)
 	reInDays    = regexp.MustCompile(`(?i)^\s*(?:in|tra)\s+(\d+)\s*(?:d(?:ays?)?|giorni?)\s*$`)
 
 	// "HH:MM" alone
