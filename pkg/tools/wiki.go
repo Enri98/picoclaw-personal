@@ -658,8 +658,9 @@ func (t *wikiProposeTool) Execute(_ context.Context, args map[string]any) *ToolR
 	}
 
 	return &ToolResult{
-		ForLLM:  fmt.Sprintf("Proposal queued for %s. Awaiting user approval via Telegram.", rawPath),
-		ForUser: fmt.Sprintf("Wiki write proposal ready.\nPath: %s\nReason: %s\nRun /apply %s to confirm (expires in 15 min).", rawPath, reason, id),
+		ForLLM:          fmt.Sprintf("Proposal queued for %s with id %s. The user has been shown the proposal ID and the /apply command.", rawPath, id),
+		ForUser:         fmt.Sprintf("Wiki write proposal ready.\nPath: %s\nReason: %s\nRun /apply %s to confirm (expires in 15 min).", rawPath, reason, id),
+		ResponseHandled: true,
 	}
 }
 

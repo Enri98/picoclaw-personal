@@ -85,9 +85,9 @@ func run(clientID, clientSecret string) error {
 		oauth2.ApprovalForce,
 	)
 
-	fmt.Fprintln(os.Stderr, "Opening browser for Google Calendar OAuth consent...")
+	fmt.Fprintf(os.Stderr, "Open this URL in your browser if it does not open automatically:\n%s\n\n", authURL)
 	if err := openBrowser(authURL); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open browser automatically. Open this URL manually:\n%s\n", authURL)
+		fmt.Fprintf(os.Stderr, "(could not open browser automatically: %v)\n", err)
 	}
 
 	// Wait for the OAuth callback.
@@ -167,7 +167,7 @@ func openBrowser(url string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", url)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	case "darwin":
 		cmd = exec.Command("open", url)
 	default:

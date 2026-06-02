@@ -1,0 +1,34 @@
+[Unit]
+Description=PicoClaw personal assistant
+After=network-online.target
+Wants=network-online.target
+OnFailure=picoclaw-alert.service
+
+[Service]
+Type=simple
+User=picoclaw
+Group=picoclaw
+SupplementaryGroups=picoclaw-secrets
+WorkingDirectory=/home/picoclaw
+Environment=PICOCLAW_CONFIG=/home/picoclaw/config.json
+Environment=PICOCLAW_BUILTIN_SKILLS=/home/picoclaw/skills
+Environment=TZ=Europe/Rome
+EnvironmentFile=/etc/picoclaw/secrets.env
+ExecStart=/usr/local/bin/picoclaw gateway
+Restart=on-failure
+RestartSec=10s
+MemoryHigh=200M
+MemoryMax=300M
+
+# NoNewPrivileges must be false so sudo to picoclaw-shell works for the bash tool.
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/picoclaw
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

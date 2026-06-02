@@ -9,9 +9,10 @@
 # After install, the picoclaw user can invoke the runshell helper as
 # picoclaw-shell with no password prompt. No other commands are permitted.
 #
-# Defense in depth: scrub the entire environment for this specific command so
-# secrets loaded into picoclaw's process (TELEGRAM_BOT_TOKEN, GMAIL_REFRESH_TOKEN,
-# etc.) cannot leak into the runshell child even if a future operator changes
-# the global Defaults env_reset setting.
-Defaults!/usr/local/bin/picoclaw-runshell env_reset, env_keep=""
+# Defense in depth: reset the environment for this specific command so secrets
+# loaded into picoclaw's process (TELEGRAM_BOT_TOKEN, GMAIL_REFRESH_TOKEN, etc.)
+# cannot leak into the runshell child. env_reset already clears everything
+# except a small identity whitelist (HOME, PATH, LOGNAME, etc.) — none of which
+# carry app secrets.
+Defaults!/usr/local/bin/picoclaw-runshell env_reset
 picoclaw ALL=(picoclaw-shell) NOPASSWD: /usr/local/bin/picoclaw-runshell
